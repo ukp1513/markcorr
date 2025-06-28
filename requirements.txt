@@ -1,0 +1,7 @@
+numpy
+matplotlib
+scipy
+astropy
+treecorr
+gundam
+pandas
