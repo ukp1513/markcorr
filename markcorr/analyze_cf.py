@@ -37,14 +37,15 @@ def _projected3dCF_model(rp, r0, gam):
     return rp * pow((r0/rp), gam) * gamma(0.5) * gamma(0.5*(gam-1)) / gamma(0.5*gam)
 
 
-def fitCFMcf(cfType, sepMin, sepMax, sepMinToFit, sepMaxToFit, doFit2pcf=True, useFullCovar=True, doSvdFilter=False, doHartlapCorr=False, doMCF=True, realProperties=None, dirName=os.getcwd(), plotXScale='log', plotYScale='log', ignoreNegatives = True, computeIC = False):
+def do_analyze(cfType, sepMin, sepMax, sepMinToFit, sepMaxToFit, doFit2pcf=True, useFullCovar=True, doSvdFilter=False, doHartlapCorr=False, doMCF=True, realProperties=None, dirName=os.getcwd(), plotXScale='log', plotYScale='log', ignoreNegatives = True, computeIC = False):
+
+    if doMCF and realProperties is None:
+        raise ValueError("realProperties list has to be given if doMCF is True")
 
     biproductDirName = os.path.join(dirName, "biproducts")
     resultsDirName = os.path.join(dirName, "results")
 
     validCfTypes = ['angular', '3d_redshift', '3d_projected']
-    if cfType not in validCfTypes:
-        raise ValueError("Invalid cfType '%s'. Must be one of: %s." %(cfType, ', '.join(validCfTypes)))
 
     if cfType == 'angular':
 
@@ -72,6 +73,9 @@ def fitCFMcf(cfType, sepMin, sepMax, sepMinToFit, sepMaxToFit, doFit2pcf=True, u
         mcfYLabel = r"$M_p (r_p)$"
         cfFigName = dirName+os.path.sep+"fig_3DProjectedCF.png"
         mcfFigName = dirName+os.path.sep+"fig_3DProjectedMCF.png"
+
+    else:
+        raise ValueError("Invalid cfType '%s'. Must be one of: %s." %(cfType, ', '.join(validCfTypes)))
 
     if not doSvdFilter:
         print("\nSVD correction NOT done!")
@@ -339,7 +343,7 @@ def fitCFMcf(cfType, sepMin, sepMax, sepMinToFit, sepMaxToFit, doFit2pcf=True, u
         if cfType == 'angular':
 
             try:
-                popt, pcov = curve_fit(_angularCF_model, sepToFit, CFToFit, sigma=sigmaToFit)
+                popt, pcov, _, _, _ = curve_fit(_angularCF_model, sepToFit, CFToFit, sigma=sigmaToFit)
             except Exception as e:
                 print(f"Error fitting: {e}")
                 return
@@ -349,10 +353,10 @@ def fitCFMcf(cfType, sepMin, sepMax, sepMinToFit, sepMaxToFit, doFit2pcf=True, u
             print('Curve fitting parameters:\nA = %0.2lf +/- %0.2lf\ngamma = %0.2lf +/- %0.2lf\n' %angularFitParams)
             bestFitModelCurve = _angularCF_model(sepToPlot, AFit, gammaFit)
             plt.errorbar(sepToFit, CFToFit, CFErrToFit,ls='none',capsize=5,ms=10,marker='o',mew=1.0,mec='black',mfc='black',ecolor='black',elinewidth=1)
-            label = (r"$\omega(\theta)=A \theta^{1-\gamma}$" + "\n" + r"$A = %0.2f \pm %0.2f$" + "\n" + r"$\gamma = %0.2f \pm %0.2f$")
+            plotLabel = (r"$\omega(\theta)=A \theta^{1-\gamma}$" + "\n" + r"$A = %0.2f \pm %0.2f$" + "\n" + r"$\gamma = %0.2f \pm %0.2f$")
             if SVDDone:
-                label = "SVD Done" + "\n" + label
-            plt.plot(sepToPlot, bestFitModelCurve, color='red',label=label %angularFitParams)
+                plotLabel = "SVD Done" + "\n" + plotLabel
+            plt.plot(sepToPlot, bestFitModelCurve, color='red',label=plotLabel %angularFitParams)
 
 
             # WRITING TO FILES
@@ -387,10 +391,10 @@ def fitCFMcf(cfType, sepMin, sepMax, sepMinToFit, sepMaxToFit, doFit2pcf=True, u
             print('Curve fitting parameters:\ns0 = %0.2lf +/- %0.2lf\ngamma = %0.2lf +/- %0.2lf\n' %threeDFitParams)
             bestFitModelCurve = _redshift3dCF_model(sepToPlot, s0Fit, gammaFit)
             plt.errorbar(sepToFit, CFToFit, CFErrToFit, ls='none',capsize=5,ms=10,marker='o',mew=1.0,mec='black',mfc='black',ecolor='black',elinewidth=1)
-            label = r"$\xi(s)=(s/s_0)^{-\gamma}$" + "\n" + r"$s_0 = %0.2f \pm %0.2f$" + "\n" + r"$\gamma = %0.2f \pm %0.2f$"
+            plotLabel = r"$\xi(s)=(s/s_0)^{-\gamma}$" + "\n" + r"$s_0 = %0.2f \pm %0.2f$" + "\n" + r"$\gamma = %0.2f \pm %0.2f$"
             if SVDDone:
-                label = "SVD Done" + "\n" + label
-            plt.plot(sepToPlot, bestFitModelCurve, color='red',label=label %threeDFitParams)
+                plotLabel = "SVD Done" + "\n" + plotLabel
+            plt.plot(sepToPlot, bestFitModelCurve, color='red',label=plotLabel %threeDFitParams)
 
             # WRITING TO FILES
 
@@ -414,10 +418,10 @@ def fitCFMcf(cfType, sepMin, sepMax, sepMinToFit, sepMaxToFit, doFit2pcf=True, u
             print('Curve fitting parameters:\nr0 = %0.2lf +/- %0.2lf\ngamma = %0.2lf +/- %0.2lf\n' %projectedFitParams)
             bestFitModelCurve = _projected3dCF_model(sepToPlot, r0Fit, gammaFit)
             plt.errorbar(sepToFit, CFToFit, CFErrToFit, ls='none',capsize=5,ms=10,marker='o',mew=1.0,mec='black',mfc='black',ecolor='black',elinewidth=1)
-            label = r"$\xi(r)=(r/r_0)^{-\gamma}$" + "\n" + r"$r_0 = %0.2f \pm %0.2f$" + "\n" + r"$\gamma = %0.2f \pm %0.2f$"
+            plotLabel = r"$\xi(r)=(r/r_0)^{-\gamma}$" + "\n" + r"$r_0 = %0.2f \pm %0.2f$" + "\n" + r"$\gamma = %0.2f \pm %0.2f$"
             if SVDDone:
-                label = "SVD Done" + "\n" + label
-            plt.plot(sepToPlot, bestFitModelCurve, color='red',label=label %projectedFitParams)
+                plotLabel = "SVD Done" + "\n" + plotLabel
+            plt.plot(sepToPlot, bestFitModelCurve, color='red',label=plotLabel %projectedFitParams)
 
             # WRITING TO FILES
 
