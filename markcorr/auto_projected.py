@@ -1,4 +1,4 @@
-import numpy as np 
+import numpy as np
 from scipy.stats import rankdata
 from astropy.table import Table
 from astropy.cosmology import FlatLambdaCDM
@@ -22,8 +22,8 @@ def omegap_rp(raReal, decReal, zReal, raRand, decRand, zRand, rpMin, rpNBins, rp
     gals = Table([raReal, decReal, zReal, distReal], names=('ra', 'dec', 'z', 'dcom'))
     rans = Table([raRand, decRand, zRand, distRand], names=('ra', 'dec', 'z', 'dcom'))
 
-    par = gun.packpars(kind='pcf', h0=H0, omegam=OmegaM, omegal=(1-OmegaM), nsepp=int(rpNBins), seppmin=rpMin, dsepp=rpBinWidth, calcdist=False, logsepp=True, nsepv=int(piNBins), 
-                       dsepv=piBinWidth, estimator='LS', doboot=False) 
+    par = gun.packpars(kind='pcf', h0=H0, omegam=OmegaM, omegal=(1-OmegaM), nsepp=int(rpNBins), seppmin=rpMin, dsepp=rpBinWidth, calcdist=False, logsepp=True, nsepv=int(piNBins),
+                       dsepv=piBinWidth, estimator='LS', doboot=False)
 
     gals['wei'] = 1.
     rans['wei'] = 1.
@@ -31,12 +31,9 @@ def omegap_rp(raReal, decReal, zReal, raRand, decRand, zRand, rpMin, rpNBins, rp
     result = gun.pcf(gals, rans, par, write=False)
     rp = result['rpm']
     omegaP = result['wrp']
-    
-    if doBoot:
-        omegaPErr = result['wrperr']
-        return rp, omegaP, omegaPErr
-    else:
-        return rp, omegaP
+    omegaPErr = result['wrperr'] if doBoot else None
+
+    return rp, omegaP, omegaPErr
 
 def weighted_omegap_rp(raReal, decReal, zReal, weightReal, raRand, decRand, zRand, rpMin, rpNBins, rpBinWidth, piNBins, piBinWidth, cosmologyH0Om0, doBoot=False):
 
@@ -48,28 +45,27 @@ def weighted_omegap_rp(raReal, decReal, zReal, weightReal, raRand, decRand, zRan
     gals = Table([raReal, decReal, zReal, distReal], names=('ra', 'dec', 'z', 'dcom'))
     rans = Table([raRand, decRand, zRand, distRand], names=('ra', 'dec', 'z', 'dcom'))
 
-    par = gun.packpars(kind='pcf', h0=H0, omegam=OmegaM, omegal=(1-OmegaM), nsepp=int(rpNBins), seppmin=rpMin, dsepp=rpBinWidth, calcdist=False, logsepp=True, nsepv=int(piNBins), 
-                       dsepv=piBinWidth, estimator='LS', doboot=False) 
+    par = gun.packpars(kind='pcf', h0=H0, omegam=OmegaM, omegal=(1-OmegaM), nsepp=int(rpNBins), seppmin=rpMin, dsepp=rpBinWidth, calcdist=False, logsepp=True, nsepv=int(piNBins),
+                       dsepv=piBinWidth, estimator='LS', doboot=False)
 
-    gals['wei'] = weightReal/np.mean(weightReal) # gundam does not normalize the weight inside it. 
+    gals['wei'] = weightReal/np.mean(weightReal) # gundam does not normalize the weight inside it.
     rans['wei'] = 1.
 
     result = gun.pcf(gals, rans, par)
     rp = result['rpm']
     weightedOmegaP = result['wrp']
+    weightedOmegaErr = result['wrperr'] if doBoot else None
 
-    if doBoot:
-        weightedOmegaErr = result['wrperr']
-        return rp, weightedOmegaP, weightedOmegaErr
-    return rp, weightedOmegaP
-	
+    return rp, weightedOmegaP, weightedOmegaErr
+
 def mcf_rp(rp, omegaP, weightedOmegaP):
     MpRp = (1 + (weightedOmegaP/rp))/(1 + (omegaP/rp))
     return MpRp
-	
-def compute_cf(realTab, realProperties, randTab, rpMin, rpNBins, rpBinWidth, piNBins, piBinWidth, doRanking, 
-               realRaCol='RA', realDecCol='Dec', realZCol='Z', randRaCol='RA', randDecCol='Dec', 
-               randZCol='Z', cosmologyH0Om0=[70.0, 0.3], doBoot=False):
+
+def do_compute(realTab, realProperties, randTab, rpMin, rpNBins, rpBinWidth, piNBins, piBinWidth, doRanking, realRaCol='RA', realDecCol='Dec', realZCol='Z', randRaCol='RA', randDecCol='Dec', randZCol='Z', cosmologyH0Om0=None, doBoot=False):
+
+    if cosmologyH0Om0 is None:
+        cosmologyH0Om0=[70.0, 0.3]
 
     raReal = realTab[realRaCol]
     decReal = realTab[realDecCol]
@@ -79,13 +75,13 @@ def compute_cf(realTab, realProperties, randTab, rpMin, rpNBins, rpBinWidth, piN
     decRand = randTab[randDecCol]
     zRand = randTab[randZCol]
 
-    rp, omegaP = omegap_rp(raReal, decReal, zReal, raRand, decRand, zRand, rpMin, rpNBins, rpBinWidth, piNBins, piBinWidth, cosmologyH0Om0, doBoot=doBoot)
+    rp, omegaP, _ = omegap_rp(raReal, decReal, zReal, raRand, decRand, zRand, rpMin, rpNBins, rpBinWidth, piNBins, piBinWidth, cosmologyH0Om0, doBoot=doBoot)
 
     rpOmegaMcfs = np.empty((len(rp), 0))
 
     rpOmegaMcfs = np.hstack((rpOmegaMcfs, rp.reshape(len(rp), 1)))
     rpOmegaMcfs = np.hstack((rpOmegaMcfs, omegaP.reshape(len(rp), 1)))
-    
+
     if len(realProperties) >= 1:
 
         for prop_i in realProperties:
@@ -95,9 +91,9 @@ def compute_cf(realTab, realProperties, randTab, rpMin, rpNBins, rpBinWidth, piN
             if doRanking:
                 weightReal = rankdata(propNow)
             else:
-                weightReal = propNow 
+                weightReal = propNow
 
-            rp, weightedOmega = weighted_omegap_rp(aReal, decReal, zReal, weightReal, raRand, decRand, zRand, rpMin, rpNBins, rpBinWidth, piNBins, piBinWidth, cosmologyH0Om0, doBoot=doBoot)
+            rp, weightedOmega, _ = weighted_omegap_rp(raReal, decReal, zReal, weightReal, raRand, decRand, zRand, rpMin, rpNBins, rpBinWidth, piNBins, piBinWidth, cosmologyH0Om0, doBoot=doBoot)
 
             MpRpArray = np.array(mcf_rp(rp, omegaP, weightedOmega)).reshape(len(rp), 1)
 

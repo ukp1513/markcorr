@@ -1,41 +1,8 @@
-import numpy as np 
-from scipy.stats import rankdata
-from astropy.table import Table
-import os
-import logging
+import numpy as np
 import treecorr
 
-logging.basicConfig(level=logging.INFO)
-
-# gundam doesnot work for LS estimator
-def omega_theta_gundam(raReal1, decReal1, raRand1, decRand1, raReal2, decReal2, raRand2, decRand2, thMin, thNBins, thBinWidth, doBoot=False):
-
-    gals1 = Table([raReal1, decReal1], names=('ra', 'dec'))
-    rans1 = Table([raRand1, decRand1], names=('ra', 'dec'))	
-    
-    gals2 = Table([raReal2, decReal2], names=('ra', 'dec'))
-    rans2 = Table([raRand2, decRand2], names=('ra', 'dec'))
-
-    par = gun.packpars(kind='accf', nsept=int(thNBins), septmin=thMin, dsept=thBinWidth, logsept=True, 
-                       estimator='LS', doboot=doBoot) 
-
-    gals1['wei'] = 1.
-    rans1['wei'] = 1.
-
-    gals2['wei'] = 1.
-    rans2['wei'] = 1.
-
-    result = gun.accf(gals, rans, par)
-    th = result['thm']
-    omega = result['wth']
-
-    if doBoot:
-        omegaErr = result['wtherr']
-        return th, omega, omegaErr
-    else:
-        return th, omega
-
 def omega_theta(raReal1, decReal1, raRand1, decRand1, raReal2, decReal2, raRand2, decRand2, thMin, thNBins, thBinWidth, doBoot=False):
+    #doBoot used as a placeholder to change to gundam in future (not relevant in case of treecorr)
 
     thMax = pow(10, (np.log10(thMin) + (thBinWidth * thNBins)))
 
@@ -58,41 +25,11 @@ def omega_theta(raReal1, decReal1, raRand1, decRand1, raReal2, decReal2, raRand2
     omega, varomega = dd.calculateXi(rr=rr, dr=dr, rd=rd)
     th = np.exp(dd.meanlogr)
 
-    if doBoot:
-        return th, omega, varomega
-    else:
-        return th, omega
+    return th, omega, varomega
 
-	
-# currently not being used - weighted cross-cf #TODO in future
-def weighted_omega_theta(raReal, decReal, weightReal, raRand, decRand, thMin, thNBins, thBinWidth, raUnits='deg', decUnits='deg', sepUnits='degrees', doBoot=False):
-
-    gals = Table([raReal, decReal], names=('ra', 'dec'))
-    rans = Table([raRand, decRand], names=('ra', 'dec'))
-
-    par = gun.packpars(kind='acf', nsept=int(thNBins), septmin=thMin, dsept=thBinWidth, logsept=True, 
-                       estimator='LS', doboot=doBoot) 
-
-    gals['wei'] = weightReal/np.mean(weightReal) # gundam does not normalize the weight inside it. 
-    rans['wei'] = 1.
-
-    result = gun.acf(gals, rans, par)
-    th = result['thm']
-    weightedOmega = result['wth']
-
-    if doBoot:
-        weightedOmegaErr = result['wtherr']
-        return th, weightedOmega, weightedOmegaErr
-    else:
-        return th, weightedOmega
-	
-def mcf_theta(th, omegaTh, weightedOmegaTh):
-	MTheta = (1 + weightedOmegaTh)/(1 + omegaTh)
-	return MTheta
-	
-def do_compute(realTab1, realTab2, randTab1, randTab2, thMin, thNBins, thBinWidth, doRanking=True, 
+def do_compute(realTab1, realTab2, randTab1, randTab2, thMin, thNBins, thBinWidth, doRanking=True,
                realRaCol1='RA',realDecCol1='DEC',randRaCol1='RA', randDecCol1='Dec', realRaCol2='RA',realDecCol2='DEC',randRaCol2='RA', randDecCol2='Dec', doBoot=False):
-    
+
     raReal1 = realTab1[realRaCol1]
     decReal1 = realTab1[realDecCol1]
 
@@ -105,11 +42,11 @@ def do_compute(realTab1, realTab2, randTab1, randTab2, thMin, thNBins, thBinWidt
     raRand2 = randTab2[randRaCol2]
     decRand2 = randTab2[randDecCol2]
 
-    th, omega = omega_theta(raReal1, decReal1, raRand1, decRand1, raReal2, decReal2, raRand2, decRand2, thMin, thNBins, thBinWidth)
+    th, omega, _ = omega_theta(raReal1, decReal1, raRand1, decRand1, raReal2, decReal2, raRand2, decRand2, thMin, thNBins, thBinWidth, doBoot=doBoot)
 
-    thOmegaMcfs = np.empty((len(th), 0))
+    thOmegas = np.empty((len(th), 0))
 
-    thOmegaMcfs = np.hstack((thOmegaMcfs, th.reshape(len(th), 1)))
-    thOmegaMcfs = np.hstack((thOmegaMcfs, omega.reshape(len(th), 1)))
+    thOmegas = np.hstack((thOmegas, th.reshape(len(th), 1)))
+    thOmegas = np.hstack((thOmegas, omega.reshape(len(th), 1)))
 
-    return thOmegaMcfs
+    return thOmegas
