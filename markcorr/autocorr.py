@@ -56,7 +56,7 @@ def compute_cf(cfType, realTab=None, randTab=None, sepMin=0.1, sepMax=10.0, sepN
     if '3d' in cfType and (realZCol is None or randZCol is None):
         raise ValueError("Redshift column should be given for cfType '%s'" %cfType)
 
-    if cfType == '3d_projected':
+    if cfType != '3d_projected':
         if any(param is not None for param in [sep2Min, sep2Max, sep2Nbins, sep2BinWidth]):
             print("Warning: sep2 parameters are ignored for cfType %s" %cfType)
 

@@ -37,7 +37,7 @@ def _projected3dCF_model(rp, r0, gam):
     return rp * pow((r0/rp), gam) * gamma(0.5) * gamma(0.5*(gam-1)) / gamma(0.5*gam)
 
 
-def do_analyze(cfType, sepMin, sepMax, sepMinToFit, sepMaxToFit, doFit2pcf=True, useFullCovar=True, doSvdFilter=False, doHartlapCorr=False, doMCF=True, realProperties=None, dirName=os.getcwd(), plotXScale='log', plotYScale='log', ignoreNegatives = True, computeIC = False):
+def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=None, doFit2pcf=True, useFullCovar=True, doSvdFilter=False, doHartlapCorr=False, doMCF=True, realProperties=None, dirName=os.getcwd(), plotXScale='log', plotYScale='log', ignoreNegatives = True, computeIC = False):
 
     if doMCF and realProperties is None:
         raise ValueError("realProperties list has to be given if doMCF is True")
@@ -124,8 +124,14 @@ def do_analyze(cfType, sepMin, sepMax, sepMinToFit, sepMaxToFit, doFit2pcf=True,
 
     CFRealAll = np.empty((totalNBins, nCopies + 2), dtype=float)
 
-    CFRealAll[:, 0] = sep       # First column ← sep
-    CFRealAll[:, 1] = CFReal    # Second column ← CFReal
+    CFRealAll[:, 0] = sep
+    CFRealAll[:, 1] = CFReal
+
+    # setting min and max seps to analyze if not given
+    sepMin = sep[0] if sepMin is None else sepMin
+    sepMax = sep[1] if sepMax is None else sepMax
+    sepMinToFit = sepMin if sepMinToFit is None else sepMinToFit
+    sepMaxToFit = sepMax if sepMaxToFit is None else sepMaxToFit
 
     for copy in range(nCopies):
         CFJK = np.loadtxt(os.path.join(CFJKDirPath, 'CFJackknife_jk%d.txt' % (copy + 1)))[:, 1]
@@ -184,16 +190,6 @@ def do_analyze(cfType, sepMin, sepMax, sepMinToFit, sepMaxToFit, doFit2pcf=True,
         if ignoreNegatives and cf_val < 0.:
             filterIndexCF.append(i)
             continue
-
-        # Always check NaN/Inf in MCF columns
-
-        if doMCF:
-            for j in range(nMarks):
-                mcf_val = CFRealAll[i, j]
-                if np.isnan(mcf_val) or np.isinf(mcf_val):
-                    filterIndexCF.append(i)
-                    break  # no need to check further marks for this row
-
 
     filterIndexCF=list(set(filterIndexCF))
 
@@ -324,9 +320,10 @@ def do_analyze(cfType, sepMin, sepMax, sepMinToFit, sepMaxToFit, doFit2pcf=True,
             fEff.write(str(nBinsEff))
 
 
-        np.savetxt(biproductDirName+os.path.sep+"cov_mat.txt",np.transpose(covMatSVD),delimiter="\t",fmt='%f')
+
 
         if covariancingSuccess:
+            np.savetxt(biproductDirName+os.path.sep+"cov_mat.txt",np.transpose(covMatSVD),delimiter="\t",fmt='%f')
             CFErrToFit = np.sqrt(np.diag(covMatSVD))
         else:
             CFErrToFit = [0 for i in range(len(sepToFit))]
@@ -343,7 +340,7 @@ def do_analyze(cfType, sepMin, sepMax, sepMinToFit, sepMaxToFit, doFit2pcf=True,
         if cfType == 'angular':
 
             try:
-                popt, pcov, _, _, _ = curve_fit(_angularCF_model, sepToFit, CFToFit, sigma=sigmaToFit)
+                popt, pcov = curve_fit(_angularCF_model, sepToFit, CFToFit, sigma=sigmaToFit)
             except Exception as e:
                 print(f"Error fitting: {e}")
                 return
@@ -376,7 +373,6 @@ def do_analyze(cfType, sepMin, sepMax, sepMinToFit, sepMaxToFit, doFit2pcf=True,
                 print("Integral Constrain = %f" %IC)
                 with open(finalDirPath+os.path.sep+'IC.txt', 'w', encoding="utf-8") as file:
                     file.write(str(IC))
-
 
         elif cfType == '3d_redshift':
 

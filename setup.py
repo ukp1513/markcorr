@@ -1,6 +1,6 @@
 from setuptools import setup
 
-setup(name='markcorr', 
+setup(name='markcorr',
       description='A package for computing galaxy two-point and marked correlation functions ',
       version='0.1',
       author='Unnikrishnan Sureshkumar',
@@ -15,6 +15,6 @@ setup(name='markcorr',
                         'gundam',
                         'pandas'
                         ],
-		scripts=[],
-		url='https://github.com/ukp1513/markcorr', 
+		scripts=['bin/analyzecf'],
+		url='https://github.com/ukp1513/markcorr',
 )
