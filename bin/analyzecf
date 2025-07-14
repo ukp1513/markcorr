@@ -8,101 +8,84 @@ import glob
 import time
 import numpy as np
 from astropy.io import fits
-from tpmcf import fit_cf
+from markcorr import analyze_cf
 
-#------------------------------------------------------------------------------------------------------------
-def makeParser():
-    parser=argparse.ArgumentParser("analyzecf")
-
-    parser.add_argument("--type", help="""Type of CF to fit (angular/3d_redshift/3d_projected)""", type=str)
-    parser.add_argument("--smin", help="""Mininum sep to plot""", type=float)
-    parser.add_argument("-smax", help="""Mininum sep to plot""", type=float)
-    parser.add_argument("--sminfit", help="""Mininum sep to fit""", type=float)
-    parser.add_argument("--smaxfit", help="""Mininum sep to fit""", type=float)
-    parser.add_argument("--dir", default=os.getcwd(), help="""Working directory""")
-
-    return parser
-
-import argparse
-import os
-
-def makeParser():
+def make_parser():
     parser = argparse.ArgumentParser("analyzecf")
 
     parser.add_argument("--type", required=True,
                         help="Type of CF to fit (angular / 3d_redshift / 3d_projected)",
                         type=str)
-    parser.add_argument("--smin", required=True,
-                        help="Minimum separation to plot",
+    parser.add_argument("--smin", help="Minimum separation to plot",
                         type=float)
-    parser.add_argument("--smax", required=True,
-                        help="Maximum separation to plot",
+    parser.add_argument("--smax", help="Maximum separation to plot",
                         type=float)
-    parser.add_argument("--sminfit", required=True,
-                        help="Minimum separation to fit",
+    parser.add_argument("--sminfit", help="Minimum separation to fit",
                         type=float)
-    parser.add_argument("--smaxfit", required=True,
+    parser.add_argument("--smaxfit",
                         help="Maximum separation to fit",
                         type=float)
-    parser.add_argument("--doFit2pcf", action="store_true",
-                        help="Whether to fit the 2PCF curve (default: False)")
-    parser.add_argument("--useFullCovar", action="store_true",
-                        help="Use full covariance matrix (default: False)")
-    parser.add_argument("--doSvdFilter", action="store_true",
-                        help="Apply SVD filtering to covariance matrix (default: False)")
-    parser.add_argument("--doHartlapCorr", action="store_true",
-                        help="Apply Hartlap correction to inverse covariance (default: False)")
-    parser.add_argument("--doMCF", action="store_true",
-                        help="Include marked correlation function (default: False)")
-    parser.add_argument("--realProperties", default=None,
-                        help="Path to file containing galaxy properties (optional)",
-                        type=str)
+    parser.add_argument("--dofit2pcf", action="store_true",
+                        help="Whether to fit the 2PCF curve")
+    parser.add_argument("--nousefullcovar", action="store_false",
+                        help="Do not use full covariance matrix")
+    parser.add_argument("--dosvdfilter", action="store_true",
+                        help="Apply SVD filtering to covariance matrix")
+    parser.add_argument("--dohartlapcorr", action="store_true",
+                        help="Apply Hartlap correction to inverse covariance")
+    parser.add_argument("--domcf", action="store_true",
+                        help="Analyze marked correlation functions")
     parser.add_argument("--dir", default=os.getcwd(),
                         help="Working directory (default: current directory)",
                         type=str)
-    parser.add_argument("--plotXScale", default='log', choices=['log', 'linear'],
-                        help="X-axis scale for plot (log or linear)")
-    parser.add_argument("--plotYScale", default='log', choices=['log', 'linear'],
-                        help="Y-axis scale for plot (log or linear)")
-    parser.add_argument("--ignoreNegatives", action="store_true",
-                        help="Ignore negative CF/MCF values during fitting (default: False)")
-    parser.add_argument("--computeIC", action="store_true",
-                        help="Compute the Information Criterion (default: False)")
+    parser.add_argument("--plotxscale", default='log', choices=['log', 'linear'],
+                        help="X-axis scale for plot (log or linear; default log)")
+    parser.add_argument("--plotyscale", default='log', choices=['log', 'linear'],
+                        help="Y-axis scale for plot (log or linear; default log)")
+    parser.add_argument("--computeic", action="store_true",
+                        help="Compute the Integral Constraint ")
 
     return parser
-
 
 #------------------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
 
-    parser=makeParser()
+    parser=make_parser()
     args=parser.parse_args()
 
-    stattype = args.type
-    working_dir = args.dir
+    statType = args.type
+    workingDir = args.dir
+    doFit2pcf = args.dofit2pcf
+    useFullCovar = args.nousefullcovar
+    doHartlapCorr = args.dohartlapcorr
+    doSvdFilter = args.dosvdfilter
+    doMCF = args.domcf
+    plotXScale = args.plotxscale
+    plotYScale = args.plotyscale
+    computeIC = args.computeic
 
-    fitsepranges = np.loadtxt(working_dir+os.path.sep+"finals/sepFitRange.txt")
+
+    sepRanges = np.loadtxt(os.path.join(workingDir, "results", "CFReal.txt"))[:,0]
+    print(sepRanges)
 
     if(args.smin is not None):
-    	sepmin = args.smin
+    	sepMin = args.smin
     else:
-    	sepmin = np.loadtxt(working_dir+os.path.sep+"results/CFReal.txt")[:,0][0]
+    	sepMin = sepRanges[0]
 
     if(args.smax is not None):
-    	sepmax = args.smax
+    	sepMax = args.smax
     else:
-    	sepmax = np.loadtxt(working_dir+os.path.sep+"results/CFReal.txt")[:,0][-1]
+    	sepMax = sepRanges[-1]
 
     if(args.sminfit is not None):
-    	sepmin_tofit = args.sminfit
+    	sepMinToFit = args.sminfit
     else:
-    	sepmin_tofit = fitsepranges[0]
+    	sepMinToFit = sepMin
 
     if(args.smaxfit is not None):
-    	sepmax_tofit = args.smaxfit
+    	sepMaxToFit = args.smaxfit
     else:
-    	sepmax_tofit = fitsepranges[1]
+    	sepMaxToFit = sepMax
 
-
-    fit_cf.fitCFMcf(stattype, sepmin, sepmax, sepmin_tofit, sepmax_tofit, real_tab=None, rand_tab=None, real_properties=[], to_svd_filter=0, to_hartlap_corr=0, fit_2pcf = 1, work_on_mcf = 0, dir_name=working_dir, plotxscale='log', plotyscale='log', ignore_negatives = True, realracol='RA', realdeccol='DEC', randracol='RA', randdeccol='Dec', compute_IC = False)
-
+    analyze_cf.do_analyze(cfType=statType, sepMin=sepMin, sepMax=sepMax, sepMinToFit=sepMinToFit, sepMaxToFit=sepMaxToFit, doFit2pcf=doFit2pcf, useFullCovar=useFullCovar, doSvdFilter=doSvdFilter, doHartlapCorr=doHartlapCorr, doMCF=doMCF, dirName=workingDir, plotXScale=plotXScale, plotYScale=plotYScale, computeIC = computeIC)

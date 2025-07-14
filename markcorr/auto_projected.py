@@ -51,7 +51,7 @@ def weighted_omegap_rp(raReal, decReal, zReal, weightReal, raRand, decRand, zRan
     gals['wei'] = weightReal/np.mean(weightReal) # gundam does not normalize the weight inside it.
     rans['wei'] = 1.
 
-    result = gun.pcf(gals, rans, par)
+    result = gun.pcf(gals, rans, par, write=False)
     rp = result['rpm']
     weightedOmegaP = result['wrp']
     weightedOmegaErr = result['wrperr'] if doBoot else None

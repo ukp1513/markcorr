@@ -30,7 +30,7 @@ def xi_s(raReal, decReal, zReal, raRand, decRand, zRand, sMin, sNBins, sBinWidth
     gals['wei'] = 1.
     rans['wei'] = 1.
 
-    result = gun.rcf(gals, rans, par)
+    result = gun.rcf(gals, rans, par, write=False)
     s = result['sm']
     xi = result['xis']
     xiErr = result['xiserr'] if doBoot else None
@@ -53,7 +53,7 @@ def weighted_xi_s(raReal, decReal, zReal, weightReal, raRand, decRand, zRand, sM
     gals['wei'] = weightReal/np.mean(weightReal) # gundam does not normalize the weight inside it.
     rans['wei'] = 1.
 
-    result = gun.rcf(gals, rans, par)
+    result = gun.rcf(gals, rans, par, write=False)
     s = result['sm']
     weightedXi = result['xis']
     weightedXiErr = result['xiserr'] if doBoot else None

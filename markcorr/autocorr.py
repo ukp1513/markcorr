@@ -65,7 +65,6 @@ def compute_cf(cfType, realTab=None, randTab=None, sepMin=0.1, sepMax=10.0, sepN
     if doMCF and realProperties is None:
         raise ValueError("Real properties should be given for marked %s correlation function" %cfType)
 
-
     # reading datatables if not given
 
     if realTab is None:
@@ -135,11 +134,19 @@ def compute_cf(cfType, realTab=None, randTab=None, sepMin=0.1, sepMax=10.0, sepN
 
     # ------------------------------------------------------------------------------------------------------------------------
 
-    original_working_dir = os.getcwd()
+    biproductDirName = os.path.join(workingDir, "biproducts")
+    os.makedirs(biproductDirName,  exist_ok=True)
 
+    resultsJKDirName = os.path.join(workingDir, "results", "jackknifes")
+    os.makedirs(resultsJKDirName, exist_ok=True)
+
+    original_working_dir = os.getcwd()
     os.chdir(workingDir)
-    os.makedirs(workingDir+os.path.sep+'biproducts',  exist_ok=True)
-    os.makedirs(workingDir+os.path.sep+'results/jackknifes',  exist_ok=True)
+
+    if doMCF:
+        with open(os.path.join(biproductDirName, 'real_properties.txt'), 'w') as f:
+            for realProp in realProperties:
+                f.write('%s\n' % realProp)
 
     summary_path = os.path.join(workingDir, 'biproducts', 'process_summary.txt')
     utils.write_process_summary(

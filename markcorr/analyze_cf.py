@@ -39,9 +39,6 @@ def _projected3dCF_model(rp, r0, gam):
 
 def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=None, doFit2pcf=True, useFullCovar=True, doSvdFilter=False, doHartlapCorr=False, doMCF=True, realProperties=None, dirName=os.getcwd(), plotXScale='log', plotYScale='log', ignoreNegatives = True, computeIC = False):
 
-    if doMCF and realProperties is None:
-        raise ValueError("realProperties list has to be given if doMCF is True")
-
     biproductDirName = os.path.join(dirName, "biproducts")
     resultsDirName = os.path.join(dirName, "results")
 
@@ -110,7 +107,8 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
     CFRealFilePath = os.path.join(resultsDirName,'CFReal.txt')
     CFJKDirPath = os.path.join(resultsDirName,'jackknifes')
     if not os.path.exists(CFRealFilePath):
-        raise FileNotFoundError("CF file of real galaxy not found")
+        print("CF file of real galaxy not found")
+        return 1
 
     CFRealResult = np.loadtxt(CFRealFilePath)
     sep = CFRealResult[:,0]
@@ -142,6 +140,10 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
 
     if doMCF:
         # COLLECTING MCFs
+        if not realProperties:
+            realPropFilePath = biproductDirName+os.path.sep+'real_properties.txt'
+            with open(realPropFilePath, 'r') as f:
+                realProperties = [line.strip() for line in f]
 
         marks = realProperties
         nMarks = len(marks)
@@ -202,7 +204,8 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
     np.savetxt(os.path.join(resultsDirName, 'CFRealAll_filtered.txt'), CFRealAllFiltered, delimiter='\t', fmt='%f')
 
     if nBinsCFFiltered == 0:
-        raise ValueError("There are no bins with reliable CF within the fitting range")
+        print("There are no bins with reliable CF within the fitting range")
+        return
 
     #REMOVING NAN BINS FROM mcf FILE
 
@@ -224,10 +227,15 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
 
     CFRealAllToFit=np.delete(CFRealAllFiltered, filterIndexCFToFit, axis=0)
 
+    if CFRealAllToFit.shape[0] < 2:
+        print("\nCannot compute covariance: need at least two valid bins!")
+        return None
+
     np.savetxt(os.path.join(resultsDirName, 'CFRealAll_filtered_tofit.txt'), CFRealAllToFit, delimiter='\t', fmt='%f')
 
     if nBinsCFToFit == 0:
-        raise ValueError("There are no bins with reliable CF within the fitting range")
+        print("There are no bins with reliable CF within the fitting range")
+        return
 
     # COMPUTING COVARIANCE MATRIX FOR ALL FILTERED BINS AND PLOTTING ALL BINS
 
@@ -334,8 +342,10 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
 
         if useFullCovar:
             sigmaToFit = covMatSVD
+            print("\nFitting using full covariance matrix...\n")
         else:
             sigmaToFit = CFErrToFit
+            print("\nFitting using only diagonal elements of the covariance matrix...\n")
 
         if cfType == 'angular':
 

@@ -13,7 +13,7 @@ def omega_theta(raReal, decReal, raRand, decRand, thMin, thNBins, thBinWidth, do
     gals['wei'] = 1.
     rans['wei'] = 1.
 
-    result = gun.acf(gals, rans, par)
+    result = gun.acf(gals, rans, par, write=False)
     th = result['thm']
     omega = result['wth']
     omegaErr = result['wtherr'] if doBoot else None
@@ -30,7 +30,7 @@ def weighted_omega_theta(raReal, decReal, weightReal, raRand, decRand, thMin, th
     gals['wei'] = weightReal/np.mean(weightReal) # gundam does not normalize the weight inside it.
     rans['wei'] = 1.
 
-    result = gun.acf(gals, rans, par)
+    result = gun.acf(gals, rans, par, write=False)
     th = result['thm']
     weightedOmega = result['wth']
     weightedOmegaErr = result['wtherr'] if doBoot else None
