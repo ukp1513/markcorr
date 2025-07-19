@@ -1,6 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.special import gamma
 import os
 import shutil
 from scipy.optimize import curve_fit
@@ -8,6 +7,9 @@ import bokeh.palettes as bp
 from . import integral_constrain
 from matplotlib.ticker import FormatStrFormatter
 from astropy.table import Table
+import emcee
+from matplotlib.gridspec import GridSpec
+import seaborn as sns
 
 def _covmat_to_corrmat(covariance):
     std_devs = np.sqrt(np.diag(covariance))
@@ -34,10 +36,205 @@ def _redshift3dCF_model(s, s0, gam):
     return pow((s/s0), (-1*gam))
 
 def _projected3dCF_model(rp, r0, gam):
-    return rp * pow((r0/rp), gam) * gamma(0.5) * gamma(0.5*(gam-1)) / gamma(0.5*gam)
+    from scipy.special import gamma as Gamma
+    return rp * pow((r0/rp), gam) * Gamma(0.5) * Gamma(0.5*(gam-1)) / Gamma(0.5*gam)
+
+def log_likelihood_fullcovar(CFparams, sep, CFObs, covMat, modelFunc):
+    CFModel = modelFunc(sep, *CFparams)
+    delta = CFObs - CFModel
+    invCovMat = np.linalg.inv(covMat)
+    chi2 = delta @ invCovMat @ delta
+    return -0.5 * chi2
+
+def log_likelihood_diagcovar(CFparams, sep, CFObs, CFSigma, modelFunc):
+    CFModel = modelFunc(sep, *CFparams)
+    delta = CFObs - CFModel
+    chi2 = np.sum(delta**2 / CFSigma**2)
+    return -0.5 * chi2
+
+def log_prior(CFparams, cfType):
+    if cfType == 'angular':
+        A, gam = CFparams
+        if 0 < A < 10 and 0.5 < gam < 3.5:
+            return 0.0
+    else:
+        r0, gam = CFparams
+        if 0 < r0 < 50 and 0.5 < gam < 3.5:
+            return 0.0
+    return -np.inf
+
+def log_posterior(CFparams, sep, cfObs, sigmaFit, modelFunc, cfType, useFullCovar=True):
+    lp = log_prior(CFparams, cfType)
+    if not np.isfinite(lp):
+        return -np.inf
+    if useFullCovar:
+        return lp + log_likelihood_fullcovar(CFparams, sep, cfObs, sigmaFit, modelFunc)
+    else:
+        return lp + log_likelihood_diagcovar(CFparams, sep, cfObs, sigmaFit, modelFunc)
+
+def _run_mcmc(cfType, sepToFit, CFToFit, sigmaFit, nWalkers=50, nSteps=5000, useFullCovar=True):
+
+    # Select model
+    if cfType == 'angular':
+        modelFunc = _angularCF_model
+        initial = [0.01, 1.8]
+    elif cfType == '3d_redshift':
+        modelFunc = _redshift3dCF_model
+        initial = [5.0, 1.8]
+    elif cfType == '3d_projected':
+        modelFunc = _projected3dCF_model
+        initial = [5.0, 1.8]
+    else:
+        raise ValueError("Unknown cfType")
+
+    nDim = len(initial)
+    pos = initial + 1e-4 * np.random.randn(nWalkers, nDim)
+
+    sampler = emcee.EnsembleSampler(nWalkers, nDim, log_posterior, args=(sepToFit, CFToFit, sigmaFit, modelFunc, cfType, useFullCovar))
+    sampler.run_mcmc(pos, nSteps, progress=True)
+
+    return sampler
+
+def model_curve_plot_label(sep, param, cfType):
+    if cfType == 'angular':
+        modelFunc = _angularCF_model
+        plotLabel = r"$\omega(\theta)=A \theta^{1-\gamma}$" + "\n" + r"$A = %0.2f \pm %0.2f$" + "\n" + r"$\gamma = %0.2f \pm %0.2f$"
+    elif cfType == '3d_redshift':
+        modelFunc = _redshift3dCF_model
+        plotLabel = r"$\xi(s)=(s/s_0)^{-\gamma}$" + "\n" + r"$s_0 = %0.2f \pm %0.2f$" + "\n" + r"$\gamma = %0.2f \pm %0.2f$"
+    elif cfType == '3d_projected':
+        modelFunc = _projected3dCF_model
+        plotLabel = r"$\xi(r)=(r/r_0)^{-\gamma}$" + "\n" + r"$r_0 = %0.2f \pm %0.2f$" + "\n" + r"$\gamma = %0.2f \pm %0.2f$"
+    else:
+        print("Wrong cfType")
+        return 1
 
 
-def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=None, doFit2pcf=True, useFullCovar=True, doSvdFilter=False, doHartlapCorr=False, doMCF=True, realProperties=None, dirName=os.getcwd(), plotXScale='log', plotYScale='log', ignoreNegatives = True, computeIC = False):
+    return modelFunc(sep, param[0], param[2]), plotLabel
+
+def plot_posterior(samples, param1Lab, param2Lab=r'$\gamma$', figFileName=None):
+
+    param1Samples = samples[:, 0]
+    param2Samples = samples[:, 1]
+
+    # Median and std
+    best = np.median(samples, axis=0)
+    errs = np.std(samples, axis=0)
+    p1_med, p2_med = best
+    p1_std, p2_std = errs
+
+    fig = plt.figure(figsize=(5, 5))
+    gs = GridSpec(2, 2, figure=fig)
+
+    # Top-left: KDE for param1
+    ax0 = fig.add_subplot(gs[0, 0])
+    sns.kdeplot(x=param1Samples, ax=ax0, fill=True, color="skyblue", bw_adjust=0.8)
+    ax0.axvline(p1_med, color='blue', linestyle='--', label='Median', lw=1.5)
+    ax0.axvline(p1_med-p1_std, color='blue', linestyle='dotted', lw=1.0)
+    ax0.axvline(p1_med+p1_std, color='blue', linestyle='dotted', lw=1.0)
+    ax0.set_xticklabels([])
+
+    # Empty top-right
+    fig.add_subplot(gs[0, 1]).axis('off')
+
+    # Bottom-left: 2D KDE with 1σ, 2σ, 3σ contours
+    ax1 = fig.add_subplot(gs[1, 0])
+    sns.kdeplot(
+        x=param1Samples, y=param2Samples, ax=ax1,
+        fill=True, cmap="Blues", levels=10,
+        thresh=0, bw_adjust=0.8, cumulative=False, common_norm=False
+    )
+    ax1.plot(p1_med, p2_med, 'o', color='black', label='Median')
+    ax1.set_xlabel(param1Lab)
+    ax1.set_ylabel(param2Lab)
+
+    # Bottom-right: KDE for param2 (vertical)
+
+
+    ax2 = fig.add_subplot(gs[1, 1])
+    sns.kdeplot(y=param2Samples, ax=ax2, fill=True, color="salmon", bw_adjust=0.8)
+    ax2.axhline(p2_med, color='red', linestyle='--', label='Median', lw=1.5)
+    ax2.axhline(p2_med-p2_std, color='red', linestyle='dotted', lw=1.0)
+    ax2.axhline(p2_med+p2_std, color='red', linestyle='dotted', lw=1.0)
+    ax2.set_yticklabels([])
+
+    plt.tight_layout()
+    if figFileName:
+        plt.savefig(figFileName, dpi=300, bbox_inches='tight')
+    plt.close()
+    return None
+
+def plot_error_ellipse(popt, pcov, param1Lab, param2Lab=r'$\gamma$', figFileName=None):
+
+    from scipy.stats import norm
+    from matplotlib.patches import Ellipse
+
+    p1, p2 = popt[0], popt[1]
+    p1_std, p2_std = np.sqrt(pcov[0, 0]), np.sqrt(pcov[1, 1])
+
+    fig = plt.figure(figsize=(5, 5))
+    gs = GridSpec(2, 2, figure=fig)
+
+    # Top-left: 1D Gaussian for param1
+    ax0 = fig.add_subplot(gs[0, 0])
+    x1 = np.linspace(p1 - 4*p1_std, p1 + 4*p1_std, 500)
+    y1 = norm.pdf(x1, loc=p1, scale=p1_std)
+    ax0.plot(x1, y1, color='blue')
+    ax0.axvline(p1, color='blue', linestyle='--', lw=1.5, label='Mean')
+    ax0.fill_between(x1, 0, y1, where=((x1 >= p1 - p1_std) & (x1 <= p1 + p1_std)),
+                     color='blue', alpha=0.2, label='±1σ')
+    ax0.set_xticklabels([])
+    ax0.set_ylim(0,)
+
+    # Empty top-right
+    fig.add_subplot(gs[0, 1]).axis('off')
+
+    # Bottom-left: 2D error ellipse contour
+    ax1 = fig.add_subplot(gs[1, 0])
+    ax1.set_xlabel(param1Lab)
+    ax1.set_ylabel(param2Lab)
+
+    # Plot the best-fit point
+    ax1.plot(p1, p2, 'o', color='black', label='Best fit')
+
+    # Compute and plot the 1σ error ellipse
+    vals, vecs = np.linalg.eigh(pcov)
+    order = vals.argsort()[::-1]
+    vals = vals[order]
+    vecs = vecs[:, order]
+
+    # Width and height of ellipse = 2 * sqrt(eigenvalues) for 1σ
+    width, height = 2 * np.sqrt(vals)
+    angle = np.degrees(np.arctan2(*vecs[:, 0][::-1]))
+
+    ellipse = Ellipse(xy=(p1, p2), width=width, height=height, angle=angle,
+                      edgecolor='blue', facecolor='none', lw=2, label='1σ error ellipse')
+    ax1.add_patch(ellipse)
+
+    # Set limits around the ellipse
+    ax1.set_xlim(p1 - 4*p1_std, p1 + 4*p1_std)
+    ax1.set_ylim(p2 - 4*p2_std, p2 + 4*p2_std)
+
+    ax1.legend()
+
+    # Bottom-right: 1D Gaussian for param2 (vertical)
+    ax2 = fig.add_subplot(gs[1, 1])
+    y2 = np.linspace(p2 - 4*p2_std, p2 + 4*p2_std, 500)
+    p2_pdf = norm.pdf(y2, loc=p2, scale=p2_std)
+    ax2.plot(p2_pdf, y2, color='red')
+    ax2.axhline(p2, color='red', linestyle='--', lw=1.5, label='Mean')
+    ax2.fill_betweenx(y2, 0, p2_pdf, where=((y2 >= p2 - p2_std) & (y2 <= p2 + p2_std)),
+                      color='red', alpha=0.2, label='±1σ')
+    ax2.set_yticklabels([])
+    ax2.set_xlim(0,)
+
+    plt.tight_layout()
+    if figFileName:
+        plt.savefig(figFileName, dpi=300, bbox_inches='tight')
+    plt.close()
+
+
+def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=None, doFit2pcf=True, useFullCovar=True, doSvdFilter=False, doHartlapCorr=False, doMCF=True, realProperties=None, dirName=os.getcwd(), plotXScale='log', plotYScale='log', ignoreNegatives = True, computeIC = False, doCurveFit=True, doMCMC=False):
 
     biproductDirName = os.path.join(dirName, "biproducts")
     resultsDirName = os.path.join(dirName, "results")
@@ -52,6 +249,8 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
         mcfYLabel = r"$M (\theta)$"
         cfFigName = dirName+os.path.sep+"fig_angularCF.png"
         mcfFigName = dirName+os.path.sep+"fig_angularMCF.png"
+        param1Lab = r"$A$"
+        param2Lab = r"$\gamma$"
 
     elif cfType == '3d_redshift':
 
@@ -61,6 +260,8 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
         mcfYLabel = r"$M (s)$"
         cfFigName = dirName+os.path.sep+"fig_3DRedshiftCF.png"
         mcfFigName = dirName+os.path.sep+"fig_3DRedshiftMCF.png"
+        param1Lab = r"$r_0$"
+        param2Lab = r"$\gamma$"
 
     elif cfType == '3d_projected':
 
@@ -70,6 +271,8 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
         mcfYLabel = r"$M_p (r_p)$"
         cfFigName = dirName+os.path.sep+"fig_3DProjectedCF.png"
         mcfFigName = dirName+os.path.sep+"fig_3DProjectedMCF.png"
+        param1Lab = r"$r_0$"
+        param2Lab = r"$\gamma$"
 
     else:
         raise ValueError("Invalid cfType '%s'. Must be one of: %s." %(cfType, ', '.join(validCfTypes)))
@@ -94,9 +297,8 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
     if os.path.exists(invCovMatSVDFileName):
         os.remove(invCovMatSVDFileName)
 
-    cwdFullPath = os.getcwd()
-    cwdSplit=cwdFullPath.split('/')
-    sampleName=cwdSplit[-1].upper()
+    dirNameSplit=dirName.split('/')
+    sampleName=dirNameSplit[-1].upper()
 
     print("\n--------------------------------------------")
     print("\nFitting sample %s....\n" %(sampleName))
@@ -338,8 +540,6 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
 
         np.savetxt(finalDirPath+os.path.sep+'final_CF.txt', np.transpose([sepToFit, CFToFit, CFErrToFit]), fmt='%f', delimiter='\t')
 
-        # FIT USING CURVE_FIT
-
         if useFullCovar:
             sigmaToFit = covMatSVD
             print("\nFitting using full covariance matrix...\n")
@@ -347,99 +547,106 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
             sigmaToFit = CFErrToFit
             print("\nFitting using only diagonal elements of the covariance matrix...\n")
 
-        if cfType == 'angular':
+        #FIT USING MCMC
 
-            try:
-                popt, pcov = curve_fit(_angularCF_model, sepToFit, CFToFit, sigma=sigmaToFit)
-            except Exception as e:
-                print(f"Error fitting: {e}")
-                return
+        # setup MCMC
 
-            AFit, AErrFit, gammaFit, gammaErrFit = popt[0], np.sqrt(pcov[0,0]), popt[1], np.sqrt(pcov[1,1])
-            angularFitParams = (AFit, AErrFit, gammaFit, gammaErrFit)
-            print('Curve fitting parameters:\nA = %0.2lf +/- %0.2lf\ngamma = %0.2lf +/- %0.2lf\n' %angularFitParams)
-            bestFitModelCurve = _angularCF_model(sepToPlot, AFit, gammaFit)
-            plt.errorbar(sepToFit, CFToFit, CFErrToFit,ls='none',capsize=5,ms=10,marker='o',mew=1.0,mec='black',mfc='black',ecolor='black',elinewidth=1)
-            plotLabel = (r"$\omega(\theta)=A \theta^{1-\gamma}$" + "\n" + r"$A = %0.2f \pm %0.2f$" + "\n" + r"$\gamma = %0.2f \pm %0.2f$")
-            if SVDDone:
-                plotLabel = "SVD Done" + "\n" + plotLabel
-            plt.plot(sepToPlot, bestFitModelCurve, color='red',label=plotLabel %angularFitParams)
+        if doMCMC:
 
+            sampler = _run_mcmc(cfType, sepToFit, CFToFit, sigmaToFit, nWalkers=32, nSteps=5000, useFullCovar=useFullCovar)
 
-            # WRITING TO FILES
+            samples = sampler.get_chain(discard=1000, thin=10, flat=True)
 
-            np.savetxt(finalDirPath+os.path.sep+'CF_fit_params_covariance.txt', pcov, fmt='%f')
-            np.savetxt(finalDirPath+os.path.sep+'CF_fit_params.txt', [angularFitParams], fmt='%f', delimiter='\n')
-            np.savetxt(finalDirPath+os.path.sep+'sepFitRange.txt', [sepMinToFit, sepMaxToFit], fmt='%f', delimiter='\n')
+            plot_posterior(samples, param1Lab, param2Lab, figFileName=dirName+os.path.sep+"fig_param_covariance.png")
 
+            best = np.median(samples, axis=0)
+            errs = np.std(samples, axis=0)
 
-            if computeIC:
-                if randTab is None:
-                    randTab = Table.read(dirName+os.path.sep+'random_galaxies', format='ascii')
-                for col in randTab.colnames:
-                    randTab.rename_column(col, col.upper())
+            CFFitParams = (best[0], errs[0], best[1], errs[1])
 
-                IC = integral_constrain.computeICAngular(randgalaxies=randTab, A=AFit, gamma=gammaFit, randracol='RA', randdeccol='DEC')
-                print("Integral Constrain = %f" %IC)
-                with open(finalDirPath+os.path.sep+'IC.txt', 'w', encoding="utf-8") as file:
-                    file.write(str(IC))
+            if cfType == 'angular':
+                A, gamma = best
+                print("MCMC fit: A = %.3f ± %.3f, gamma = %.3f ± %.3f" % (A, errs[0], gamma, errs[1]))
+            else:
+                r0, gamma = best
+                print("MCMC fit: r0 = %.3f ± %.3f, gamma = %.3f ± %.3f" % (r0, errs[0], gamma, errs[1]))
 
-        elif cfType == '3d_redshift':
+            np.savetxt(finalDirPath+os.path.sep+"CF_MCMC_chain.txt", samples)
 
-            try:
-                popt, pcov = curve_fit(_redshift3dCF_model, sepToFit, CFToFit, p0=[5.0, 1.8], sigma=sigmaToFit)
-            except Exception as e:
-                print(f"Error fitting: {e}")
-                return
+        # FIT USING CURVE_FIT
 
-            s0Fit, s0ErrFit, gammaFit, gammaErrFit = popt[0],np.sqrt(pcov[0,0]),popt[1],np.sqrt(pcov[1,1])
-            threeDFitParams = (s0Fit, s0ErrFit, gammaFit, gammaErrFit)
-            print('Curve fitting parameters:\ns0 = %0.2lf +/- %0.2lf\ngamma = %0.2lf +/- %0.2lf\n' %threeDFitParams)
-            bestFitModelCurve = _redshift3dCF_model(sepToPlot, s0Fit, gammaFit)
-            plt.errorbar(sepToFit, CFToFit, CFErrToFit, ls='none',capsize=5,ms=10,marker='o',mew=1.0,mec='black',mfc='black',ecolor='black',elinewidth=1)
-            plotLabel = r"$\xi(s)=(s/s_0)^{-\gamma}$" + "\n" + r"$s_0 = %0.2f \pm %0.2f$" + "\n" + r"$\gamma = %0.2f \pm %0.2f$"
-            if SVDDone:
-                plotLabel = "SVD Done" + "\n" + plotLabel
-            plt.plot(sepToPlot, bestFitModelCurve, color='red',label=plotLabel %threeDFitParams)
+        if doCurveFit:
 
-            # WRITING TO FILES
+            if cfType == 'angular':
 
-            np.savetxt(finalDirPath+os.path.sep+'CF_fit_params_covariance.txt', pcov, fmt='%f')
-            np.savetxt(finalDirPath+os.path.sep+'CF_fit_params.txt', [threeDFitParams], fmt='%f', delimiter='\n')
-            np.savetxt(finalDirPath+os.path.sep+'sepFitRange.txt', [sepMinToFit, sepMaxToFit], fmt='%f', delimiter='\n')
+                try:
+                    popt, pcov = curve_fit(_angularCF_model, sepToFit, CFToFit, sigma=sigmaToFit)
+                except Exception as e:
+                    print(f"Error fitting: {e}")
+                    return
 
-            if computeIC:
-                print("IC Computation is not coded for 3d...") #TODO
+                AFit, AErrFit, gammaFit, gammaErrFit = popt[0], np.sqrt(pcov[0,0]), popt[1], np.sqrt(pcov[1,1])
+                CFFitParams = (AFit, AErrFit, gammaFit, gammaErrFit)
+                print('Curve fitting parameters:\nA = %0.2lf +/- %0.2lf\ngamma = %0.2lf +/- %0.2lf\n' %CFFitParams)
+                bestFitModelCurve = _angularCF_model(sepToPlot, AFit, gammaFit)
 
-        elif cfType == '3d_projected':
+                if computeIC:
+                    if randTab is None:
+                        randTab = Table.read(dirName+os.path.sep+'random_galaxies', format='ascii')
+                    for col in randTab.colnames:
+                        randTab.rename_column(col, col.upper())
 
-            try:
-                popt, pcov = curve_fit(_projected3dCF_model, sepToFit, CFToFit, p0=[5.0, 1.8], sigma=sigmaToFit)
-            except Exception as e:
-                print(f"Error fitting: {e}")
-                return
+                    IC = integral_constrain.computeICAngular(randgalaxies=randTab, A=AFit, gamma=gammaFit, randracol='RA', randdeccol='DEC')
+                    print("Integral Constrain = %f" %IC)
+                    with open(finalDirPath+os.path.sep+'IC.txt', 'w', encoding="utf-8") as file:
+                        file.write(str(IC))
 
-            r0Fit, r0ErrFit, gammaFit, gammaErrFit = popt[0],np.sqrt(pcov[0,0]),popt[1],np.sqrt(pcov[1,1])
-            projectedFitParams = (r0Fit, r0ErrFit, gammaFit, gammaErrFit)
-            print('Curve fitting parameters:\nr0 = %0.2lf +/- %0.2lf\ngamma = %0.2lf +/- %0.2lf\n' %projectedFitParams)
-            bestFitModelCurve = _projected3dCF_model(sepToPlot, r0Fit, gammaFit)
-            plt.errorbar(sepToFit, CFToFit, CFErrToFit, ls='none',capsize=5,ms=10,marker='o',mew=1.0,mec='black',mfc='black',ecolor='black',elinewidth=1)
-            plotLabel = r"$\xi(r)=(r/r_0)^{-\gamma}$" + "\n" + r"$r_0 = %0.2f \pm %0.2f$" + "\n" + r"$\gamma = %0.2f \pm %0.2f$"
-            if SVDDone:
-                plotLabel = "SVD Done" + "\n" + plotLabel
-            plt.plot(sepToPlot, bestFitModelCurve, color='red',label=plotLabel %projectedFitParams)
+            elif cfType == '3d_redshift':
 
-            # WRITING TO FILES
+                try:
+                    popt, pcov = curve_fit(_redshift3dCF_model, sepToFit, CFToFit, p0=[5.0, 1.8], sigma=sigmaToFit)
+                except Exception as e:
+                    print(f"Error fitting: {e}")
+                    return
 
-            np.savetxt(finalDirPath+os.path.sep+'CF_fit_params_covariance.txt', pcov, fmt='%f')
-            np.savetxt(finalDirPath+os.path.sep+'CF_fit_params.txt', [projectedFitParams], fmt='%f', delimiter='\n')
-            np.savetxt(finalDirPath+os.path.sep+'sepFitRange.txt', [sepMinToFit, sepMaxToFit], fmt='%f', delimiter='\n')
+                s0Fit, s0ErrFit, gammaFit, gammaErrFit = popt[0],np.sqrt(pcov[0,0]),popt[1],np.sqrt(pcov[1,1])
+                threeDFitParams = (s0Fit, s0ErrFit, gammaFit, gammaErrFit)
+                print('Curve fitting parameters:\ns0 = %0.2lf +/- %0.2lf\ngamma = %0.2lf +/- %0.2lf\n' %threeDFitParams)
+                bestFitModelCurve = _redshift3dCF_model(sepToPlot, s0Fit, gammaFit)
+                plt.errorbar(sepToFit, CFToFit, CFErrToFit, ls='none',capsize=5,ms=10,marker='o',mew=1.0,mec='black',mfc='black',ecolor='black',elinewidth=1)
 
+                if computeIC:
+                    print("IC Computation is not coded for 3d...") #TODO
 
-            if computeIC:
-                print("IC Computation is not coded for 3d...") #TODO
+            elif cfType == '3d_projected':
 
+                try:
+                    popt, pcov = curve_fit(_projected3dCF_model, sepToFit, CFToFit, p0=[5.0, 1.8], sigma=sigmaToFit)
+                except Exception as e:
+                    print(f"Error fitting: {e}")
+                    return
 
+                r0Fit, r0ErrFit, gammaFit, gammaErrFit = popt[0],np.sqrt(pcov[0,0]),popt[1],np.sqrt(pcov[1,1])
+                projectedFitParams = (r0Fit, r0ErrFit, gammaFit, gammaErrFit)
+                print('Curve fitting parameters:\nr0 = %0.2lf +/- %0.2lf\ngamma = %0.2lf +/- %0.2lf\n' %projectedFitParams)
+                bestFitModelCurve = _projected3dCF_model(sepToPlot, r0Fit, gammaFit)
+                plt.errorbar(sepToFit, CFToFit, CFErrToFit, ls='none',capsize=5,ms=10,marker='o',mew=1.0,mec='black',mfc='black',ecolor='black',elinewidth=1)
+
+                if computeIC:
+                    print("IC Computation is not coded for 3d...") #TODO
+
+            plot_error_ellipse(popt, pcov, param1Lab, param2Lab, figFileName=dirName+os.path.sep+"fig_param_covariance.png")
+
+        # PLOTTING
+
+        plt.errorbar(sepToFit, CFToFit, CFErrToFit,ls='none',capsize=5,ms=10,marker='o',mew=1.0,mec='black',mfc='black',ecolor='black',elinewidth=1)
+
+        bestFitModelCurve, plotLabel = model_curve_plot_label(sepToPlot, CFFitParams, cfType)
+        if SVDDone is True:
+            plotLabel = "SVD Done" + "\n" + plotLabel
+        plt.plot(sepToPlot, bestFitModelCurve, color='red',label=plotLabel %CFFitParams)
+
+    plt.title(sampleName)
     plt.xscale(plotXScale)
     plt.yscale(plotYScale)
     plt.xlabel(cfXLabel,labelpad=10)
@@ -447,6 +654,14 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
     plt.legend()
     plt.savefig(cfFigName , dpi=300, bbox_inches = 'tight')
     plt.close()
+
+     # WRITING TO FILES
+
+    #np.savetxt(finalDirPath+os.path.sep+'CF_fit_params_covariance.txt', pcov, fmt='%f')
+    np.savetxt(finalDirPath+os.path.sep+'CF_fit_params.txt', [CFFitParams], fmt='%f', delimiter='\n')
+    np.savetxt(finalDirPath+os.path.sep+'sepFitRange.txt', [sepMinToFit, sepMaxToFit], fmt='%f', delimiter='\n')
+
+
 
     # PLOTTING MCF
 
@@ -481,6 +696,7 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
 
             ax_now.axhline(y=1, color='black', linestyle='dashed')
 
+        plt.title(sampleName)
         plt.xscale(plotXScale)
         plt.xlabel(mcfXLabel,labelpad=10)
         plt.ylabel(mcfYLabel,labelpad=0.5)

@@ -1,13 +1,8 @@
 #!/usr/bin/env python
 
 import os
-import sys
 import argparse
-import subprocess
-import glob
-import time
 import numpy as np
-from astropy.io import fits
 from markcorr import analyze_cf
 
 def make_parser():
@@ -27,6 +22,8 @@ def make_parser():
                         type=float)
     parser.add_argument("--dofit2pcf", action="store_true",
                         help="Whether to fit the 2PCF curve")
+    parser.add_argument("--domcmc", action="store_true",
+                        help="If passed, the 2pCF is fit using MCMC, else curve_fit")
     parser.add_argument("--nousefullcovar", action="store_false",
                         help="Do not use full covariance matrix")
     parser.add_argument("--dosvdfilter", action="store_true",
@@ -63,29 +60,30 @@ if __name__ == '__main__':
     plotXScale = args.plotxscale
     plotYScale = args.plotyscale
     computeIC = args.computeic
+    doMCMC = args.domcmc
 
+    doCurveFit = not doMCMC # do either MCMC or curvefit
 
     sepRanges = np.loadtxt(os.path.join(workingDir, "results", "CFReal.txt"))[:,0]
-    print(sepRanges)
 
     if(args.smin is not None):
-    	sepMin = args.smin
+        sepMin = args.smin
     else:
-    	sepMin = sepRanges[0]
+        sepMin = sepRanges[0]
 
     if(args.smax is not None):
-    	sepMax = args.smax
+        sepMax = args.smax
     else:
-    	sepMax = sepRanges[-1]
+        sepMax = sepRanges[-1]
 
     if(args.sminfit is not None):
-    	sepMinToFit = args.sminfit
+        sepMinToFit = args.sminfit
     else:
-    	sepMinToFit = sepMin
+        sepMinToFit = sepMin
 
     if(args.smaxfit is not None):
-    	sepMaxToFit = args.smaxfit
+        sepMaxToFit = args.smaxfit
     else:
-    	sepMaxToFit = sepMax
+        sepMaxToFit = sepMax
 
-    analyze_cf.do_analyze(cfType=statType, sepMin=sepMin, sepMax=sepMax, sepMinToFit=sepMinToFit, sepMaxToFit=sepMaxToFit, doFit2pcf=doFit2pcf, useFullCovar=useFullCovar, doSvdFilter=doSvdFilter, doHartlapCorr=doHartlapCorr, doMCF=doMCF, dirName=workingDir, plotXScale=plotXScale, plotYScale=plotYScale, computeIC = computeIC)
+    analyze_cf.do_analyze(cfType=statType, sepMin=sepMin, sepMax=sepMax, sepMinToFit=sepMinToFit, sepMaxToFit=sepMaxToFit, doFit2pcf=doFit2pcf, useFullCovar=useFullCovar, doSvdFilter=doSvdFilter, doHartlapCorr=doHartlapCorr, doMCF=doMCF, dirName=workingDir, plotXScale=plotXScale, plotYScale=plotYScale, computeIC = computeIC, doCurveFit=doCurveFit, doMCMC=doMCMC)
