@@ -9,7 +9,8 @@ from matplotlib.ticker import FormatStrFormatter
 from astropy.table import Table
 import emcee
 from matplotlib.gridspec import GridSpec
-import seaborn as sns
+from scipy.stats import norm
+from matplotlib.patches import Ellipse
 
 def _covmat_to_corrmat(covariance):
     std_devs = np.sqrt(np.diag(covariance))
@@ -27,7 +28,6 @@ def _invcorrmat_to_invcovmat(inv_correlation, std_devs):
     D_inv = np.diag(1.0 / std_devs)
     inv_covariance = D_inv @ inv_correlation @ D_inv
     return inv_covariance
-
 
 def _angularCF_model(theta, A, gam):
     return A*pow(theta, 1-gam)
@@ -85,7 +85,8 @@ def _run_mcmc(cfType, sepToFit, CFToFit, sigmaFit, nWalkers=50, nSteps=5000, use
         modelFunc = _projected3dCF_model
         initial = [5.0, 1.8]
     else:
-        raise ValueError("Unknown cfType")
+        print("Wrong cfType, fitting unsuccessfull!!! ")
+        return 1
 
     nDim = len(initial)
     pos = initial + 1e-4 * np.random.randn(nWalkers, nDim)
@@ -106,68 +107,12 @@ def model_curve_plot_label(sep, param, cfType):
         modelFunc = _projected3dCF_model
         plotLabel = r"$\xi(r)=(r/r_0)^{-\gamma}$" + "\n" + r"$r_0 = %0.2f \pm %0.2f$" + "\n" + r"$\gamma = %0.2f \pm %0.2f$"
     else:
-        print("Wrong cfType")
+        print("Wrong cfType, fitting unsuccessfull!!! ")
         return 1
-
 
     return modelFunc(sep, param[0], param[2]), plotLabel
 
-def plot_posterior(samples, param1Lab, param2Lab=r'$\gamma$', figFileName=None):
-
-    param1Samples = samples[:, 0]
-    param2Samples = samples[:, 1]
-
-    # Median and std
-    best = np.median(samples, axis=0)
-    errs = np.std(samples, axis=0)
-    p1_med, p2_med = best
-    p1_std, p2_std = errs
-
-    fig = plt.figure(figsize=(5, 5))
-    gs = GridSpec(2, 2, figure=fig)
-
-    # Top-left: KDE for param1
-    ax0 = fig.add_subplot(gs[0, 0])
-    sns.kdeplot(x=param1Samples, ax=ax0, fill=True, color="skyblue", bw_adjust=0.8)
-    ax0.axvline(p1_med, color='blue', linestyle='--', label='Median', lw=1.5)
-    ax0.axvline(p1_med-p1_std, color='blue', linestyle='dotted', lw=1.0)
-    ax0.axvline(p1_med+p1_std, color='blue', linestyle='dotted', lw=1.0)
-    ax0.set_xticklabels([])
-
-    # Empty top-right
-    fig.add_subplot(gs[0, 1]).axis('off')
-
-    # Bottom-left: 2D KDE with 1σ, 2σ, 3σ contours
-    ax1 = fig.add_subplot(gs[1, 0])
-    sns.kdeplot(
-        x=param1Samples, y=param2Samples, ax=ax1,
-        fill=True, cmap="Blues", levels=10,
-        thresh=0, bw_adjust=0.8, cumulative=False, common_norm=False
-    )
-    ax1.plot(p1_med, p2_med, 'o', color='black', label='Median')
-    ax1.set_xlabel(param1Lab)
-    ax1.set_ylabel(param2Lab)
-
-    # Bottom-right: KDE for param2 (vertical)
-
-
-    ax2 = fig.add_subplot(gs[1, 1])
-    sns.kdeplot(y=param2Samples, ax=ax2, fill=True, color="salmon", bw_adjust=0.8)
-    ax2.axhline(p2_med, color='red', linestyle='--', label='Median', lw=1.5)
-    ax2.axhline(p2_med-p2_std, color='red', linestyle='dotted', lw=1.0)
-    ax2.axhline(p2_med+p2_std, color='red', linestyle='dotted', lw=1.0)
-    ax2.set_yticklabels([])
-
-    plt.tight_layout()
-    if figFileName:
-        plt.savefig(figFileName, dpi=300, bbox_inches='tight')
-    plt.close()
-    return None
-
 def plot_error_ellipse(popt, pcov, param1Lab, param2Lab=r'$\gamma$', figFileName=None):
-
-    from scipy.stats import norm
-    from matplotlib.patches import Ellipse
 
     p1, p2 = popt[0], popt[1]
     p1_std, p2_std = np.sqrt(pcov[0, 0]), np.sqrt(pcov[1, 1])
@@ -181,8 +126,7 @@ def plot_error_ellipse(popt, pcov, param1Lab, param2Lab=r'$\gamma$', figFileName
     y1 = norm.pdf(x1, loc=p1, scale=p1_std)
     ax0.plot(x1, y1, color='blue')
     ax0.axvline(p1, color='blue', linestyle='--', lw=1.5, label='Mean')
-    ax0.fill_between(x1, 0, y1, where=((x1 >= p1 - p1_std) & (x1 <= p1 + p1_std)),
-                     color='blue', alpha=0.2, label='±1σ')
+    ax0.fill_between(x1, 0, y1, where=((x1 >= p1 - p1_std) & (x1 <= p1 + p1_std)), color='blue', alpha=0.2, label='±1σ')
     ax0.set_xticklabels([])
     ax0.set_ylim(0,)
 
@@ -206,9 +150,7 @@ def plot_error_ellipse(popt, pcov, param1Lab, param2Lab=r'$\gamma$', figFileName
     # Width and height of ellipse = 2 * sqrt(eigenvalues) for 1σ
     width, height = 2 * np.sqrt(vals)
     angle = np.degrees(np.arctan2(*vecs[:, 0][::-1]))
-
-    ellipse = Ellipse(xy=(p1, p2), width=width, height=height, angle=angle,
-                      edgecolor='blue', facecolor='none', lw=2, label='1σ error ellipse')
+    ellipse = Ellipse(xy=(p1, p2), width=width, height=height, angle=angle, edgecolor='blue', facecolor='none', lw=2, label='1σ error ellipse')
     ax1.add_patch(ellipse)
 
     # Set limits around the ellipse
@@ -223,8 +165,7 @@ def plot_error_ellipse(popt, pcov, param1Lab, param2Lab=r'$\gamma$', figFileName
     p2_pdf = norm.pdf(y2, loc=p2, scale=p2_std)
     ax2.plot(p2_pdf, y2, color='red')
     ax2.axhline(p2, color='red', linestyle='--', lw=1.5, label='Mean')
-    ax2.fill_betweenx(y2, 0, p2_pdf, where=((y2 >= p2 - p2_std) & (y2 <= p2 + p2_std)),
-                      color='red', alpha=0.2, label='±1σ')
+    ax2.fill_betweenx(y2, 0, p2_pdf, where=((y2 >= p2 - p2_std) & (y2 <= p2 + p2_std)), color='red', alpha=0.2, label='±1σ')
     ax2.set_yticklabels([])
     ax2.set_xlim(0,)
 
@@ -233,8 +174,7 @@ def plot_error_ellipse(popt, pcov, param1Lab, param2Lab=r'$\gamma$', figFileName
         plt.savefig(figFileName, dpi=300, bbox_inches='tight')
     plt.close()
 
-
-def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=None, doFit2pcf=True, useFullCovar=True, doSvdFilter=False, doHartlapCorr=False, doMCF=True, realProperties=None, dirName=os.getcwd(), plotXScale='log', plotYScale='log', ignoreNegatives = True, computeIC = False, doCurveFit=True, doMCMC=False):
+def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=None, doFit2pcf=True, useFullCovar=True, doSvdFilter=False, doHartlapCorr=False, doMCF=True, realProperties=None, dirName=os.getcwd(), plotXScale='log', plotYScale='log', ignoreNegatives = True, computeIC = False, doCurveFit=True, doMCMC=True, plotTitle=None):
 
     biproductDirName = os.path.join(dirName, "biproducts")
     resultsDirName = os.path.join(dirName, "results")
@@ -275,18 +215,8 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
         param2Lab = r"$\gamma$"
 
     else:
-        raise ValueError("Invalid cfType '%s'. Must be one of: %s." %(cfType, ', '.join(validCfTypes)))
-
-    if not doSvdFilter:
-        print("\nSVD correction NOT done!")
-    else:
-        print("\nSVD correction done!")
-
-    if not doHartlapCorr:
-        print("\nHartlap correction NOT done!")
-    else:
-        print("\nHartlap correction done!")
-
+        print("Wrong cfType, fitting unsuccessfull!!! ")
+        return 1
 
     # REMOVING PREVIOUS INV COVAR FILES IF EXIST
     invCovMatFileName = os.path.join(biproductDirName ,"inv_cov_mat.txt")
@@ -300,16 +230,26 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
     dirNameSplit=dirName.split('/')
     sampleName=dirNameSplit[-1].upper()
 
-    print("\n--------------------------------------------")
-    print("\nFitting sample %s....\n" %(sampleName))
-    print("--------------------------------------------\n")
+    print("\n" + "═" * (len(dirName) + 50))
+    print("║ Fitting sample %s ║" %dirName)
+    print("═" * (len(dirName) + 50) + "\n")
+
+    if doSvdFilter is False:
+        print("\nSVD correction NOT done!")
+    else:
+        print("\nSVD correction done!")
+
+    if doHartlapCorr is False:
+        print("\nHartlap correction NOT done!")
+    else:
+        print("\nHartlap correction done!")
 
     # CREATING CFRealAll.txt for JK copies
 
     CFRealFilePath = os.path.join(resultsDirName,'CFReal.txt')
     CFJKDirPath = os.path.join(resultsDirName,'jackknifes')
     if not os.path.exists(CFRealFilePath):
-        print("CF file of real galaxy not found")
+        print("CF file of real galaxy not found, fitting unsucessfull!!!")
         return 1
 
     CFRealResult = np.loadtxt(CFRealFilePath)
@@ -340,7 +280,7 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
 
     np.savetxt(os.path.join(resultsDirName, "CFRealAll.txt"), CFRealAll,delimiter="\t",fmt='%f')
 
-    if doMCF:
+    if doMCF is True:
         # COLLECTING MCFs
         if not realProperties:
             realPropFilePath = biproductDirName+os.path.sep+'real_properties.txt'
@@ -391,7 +331,7 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
             continue
 
         # If ignoreNegatives is True, also check for negative values
-        if ignoreNegatives and cf_val < 0.:
+        if ignoreNegatives is True and cf_val < 0.:
             filterIndexCF.append(i)
             continue
 
@@ -406,12 +346,12 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
     np.savetxt(os.path.join(resultsDirName, 'CFRealAll_filtered.txt'), CFRealAllFiltered, delimiter='\t', fmt='%f')
 
     if nBinsCFFiltered == 0:
-        print("There are no bins with reliable CF within the fitting range")
-        return
+        print("There are no bins with reliable CF within the fitting range, fitting unsuccessfull!!! ")
+        return 1
 
     #REMOVING NAN BINS FROM mcf FILE
 
-    if doMCF:
+    if doMCF is True:
         for mark, mcfRealAll in mcfAllMarks.items():
             mcfRealAllFiltered = np.delete(mcfRealAll, filterIndexCF, axis=0)
             np.savetxt(os.path.join(resultsDirName, 'mcfRealAll_%s_filtered.txt' %mark), mcfRealAllFiltered, delimiter='\t', fmt='%f')
@@ -430,14 +370,14 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
     CFRealAllToFit=np.delete(CFRealAllFiltered, filterIndexCFToFit, axis=0)
 
     if CFRealAllToFit.shape[0] < 2:
-        print("\nCannot compute covariance: need at least two valid bins!")
-        return None
+        print("\nCannot compute covariance: need at least two valid bins, fitting unsuccessfull!!! ")
+        return 1
 
     np.savetxt(os.path.join(resultsDirName, 'CFRealAll_filtered_tofit.txt'), CFRealAllToFit, delimiter='\t', fmt='%f')
 
     if nBinsCFToFit == 0:
-        print("There are no bins with reliable CF within the fitting range")
-        return
+        print("There are no bins with reliable CF within the fitting range, fitting unsuccessfull!!! ")
+        return 1
 
     # COMPUTING COVARIANCE MATRIX FOR ALL FILTERED BINS AND PLOTTING ALL BINS
 
@@ -472,7 +412,7 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
 
     # fitting 2pCF
 
-    if doFit2pcf:
+    if doFit2pcf is True:
 
         covariancingSuccess = True
         SVDDone = False
@@ -501,7 +441,7 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
             DinvVec = []
 
             for lambdai in Dvector:
-                if doSvdFilter:
+                if doSvdFilter is True:
                     if lambdai < np.sqrt(2./nCopies):
                         DinvVec.append(0.)
                     else:
@@ -515,7 +455,7 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
             invCorrMatSVD = np.matmul(U, np.matmul(Dinv,UT))
             invCovMatSVD = _invcorrmat_to_invcovmat(invCorrMatSVD, stdDevs)
 
-            if doHartlapCorr:
+            if doHartlapCorr is True:
                 hartlapFactor = (nCopies - nBinsCFToFit - 2)/(nCopies-1)
                 print("Hartlap factor: ",hartlapFactor,"\n")
                 invCovMatSVD = hartlapFactor*invCovMatSVD
@@ -529,18 +469,17 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
         with open(os.path.join(biproductDirName, "effective_bins.txt"), "w", encoding="utf-8") as fEff:
             fEff.write(str(nBinsEff))
 
-
-
-
         if covariancingSuccess:
             np.savetxt(biproductDirName+os.path.sep+"cov_mat.txt",np.transpose(covMatSVD),delimiter="\t",fmt='%f')
             CFErrToFit = np.sqrt(np.diag(covMatSVD))
         else:
             CFErrToFit = [0 for i in range(len(sepToFit))]
 
+        plt.errorbar(sepToFit, CFToFit, CFErrToFit,ls='none',capsize=5,ms=10,marker='o',mew=1.0,mec='black',mfc='black',ecolor='black',elinewidth=1)
         np.savetxt(finalDirPath+os.path.sep+'final_CF.txt', np.transpose([sepToFit, CFToFit, CFErrToFit]), fmt='%f', delimiter='\t')
+        np.savetxt(finalDirPath+os.path.sep+'sepFitRange.txt', [sepMinToFit, sepMaxToFit], fmt='%f', delimiter='\n')
 
-        if useFullCovar:
+        if useFullCovar is True:
             sigmaToFit = covMatSVD
             print("\nFitting using full covariance matrix...\n")
         else:
@@ -551,31 +490,50 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
 
         # setup MCMC
 
-        if doMCMC:
+        if doMCMC is True:
 
-            sampler = _run_mcmc(cfType, sepToFit, CFToFit, sigmaToFit, nWalkers=32, nSteps=5000, useFullCovar=useFullCovar)
+            MCMCFitSuccess = True
+            try:
+                sampler = _run_mcmc(cfType, sepToFit, CFToFit, sigmaToFit, nWalkers=32, nSteps=5000, useFullCovar=useFullCovar)
+            except Exception as e:
+                print(f"Error MCMC fitting: {e}")
+                MCMCFitSuccess = False
 
-            samples = sampler.get_chain(discard=1000, thin=10, flat=True)
+            if MCMCFitSuccess is True:
+                samples = sampler.get_chain(discard=1000, thin=10, flat=True)
+                param1Samples = samples[:,0]
+                param2Samples = samples[:, 1]
 
-            plot_posterior(samples, param1Lab, param2Lab, figFileName=dirName+os.path.sep+"fig_param_covariance.png")
+                param1Best = np.median(param1Samples)
+                param2Best = np.median(param2Samples)
+                param1Err = np.std(param1Samples)
+                param2Err = np.std(param2Samples)
+                paramSamples = np.vstack([param1Samples, param2Samples])
 
-            best = np.median(samples, axis=0)
-            errs = np.std(samples, axis=0)
+                CFFitParamsMCMC = (param1Best, param1Err, param2Best, param2Err)
+                CFFitParamsCovMCMC = np.cov(paramSamples)
 
-            CFFitParams = (best[0], errs[0], best[1], errs[1])
+                if cfType == 'angular':
+                    print("MCMC fit: A = %.3f ± %.3f, gamma = %.3f ± %.3f" %CFFitParamsMCMC)
+                else:
+                    print("MCMC fit: r0 = %.3f ± %.3f, gamma = %.3f ± %.3f" %CFFitParamsMCMC)
 
-            if cfType == 'angular':
-                A, gamma = best
-                print("MCMC fit: A = %.3f ± %.3f, gamma = %.3f ± %.3f" % (A, errs[0], gamma, errs[1]))
-            else:
-                r0, gamma = best
-                print("MCMC fit: r0 = %.3f ± %.3f, gamma = %.3f ± %.3f" % (r0, errs[0], gamma, errs[1]))
+                np.savetxt(finalDirPath+os.path.sep+"CF_MCMC_chain.txt", samples)
+                np.savetxt(finalDirPath+os.path.sep+'CF_fit_params_MCMC.txt', [CFFitParamsMCMC], fmt='%f', delimiter='\n')
+                np.savetxt(finalDirPath+os.path.sep+'CF_fit_params_covariance_MCMC.txt', CFFitParamsCovMCMC, fmt='%f')
+                #plot_posterior(samples, param1Lab, param2Lab, figFileName=dirName+os.path.sep+"fig_param_covariance_mcmc.png")
+                plot_error_ellipse([param1Best, param2Best], CFFitParamsCovMCMC, param1Lab, param2Lab, figFileName=dirName+os.path.sep+"fig_param_covariance_MCMC.png")
 
-            np.savetxt(finalDirPath+os.path.sep+"CF_MCMC_chain.txt", samples)
+                bestFitModelMCMC, plotLabel = model_curve_plot_label(sepToPlot, CFFitParamsMCMC, cfType)
+                plt.plot(sepToPlot, bestFitModelMCMC, color='blue',label=plotLabel %CFFitParamsMCMC+' (MCMC)')
+
+                CFFitParams = CFFitParamsMCMC
+                CFFitParamsCov = CFFitParamsCovMCMC
 
         # FIT USING CURVE_FIT
 
-        if doCurveFit:
+        if doCurveFit is True:
+            curveFitSuccess = True
 
             if cfType == 'angular':
 
@@ -583,14 +541,12 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
                     popt, pcov = curve_fit(_angularCF_model, sepToFit, CFToFit, sigma=sigmaToFit)
                 except Exception as e:
                     print(f"Error fitting: {e}")
-                    return
+                    curveFitSuccess = False
 
                 AFit, AErrFit, gammaFit, gammaErrFit = popt[0], np.sqrt(pcov[0,0]), popt[1], np.sqrt(pcov[1,1])
-                CFFitParams = (AFit, AErrFit, gammaFit, gammaErrFit)
-                print('Curve fitting parameters:\nA = %0.2lf +/- %0.2lf\ngamma = %0.2lf +/- %0.2lf\n' %CFFitParams)
                 bestFitModelCurve = _angularCF_model(sepToPlot, AFit, gammaFit)
 
-                if computeIC:
+                if computeIC is True:
                     if randTab is None:
                         randTab = Table.read(dirName+os.path.sep+'random_galaxies', format='ascii')
                     for col in randTab.colnames:
@@ -607,15 +563,12 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
                     popt, pcov = curve_fit(_redshift3dCF_model, sepToFit, CFToFit, p0=[5.0, 1.8], sigma=sigmaToFit)
                 except Exception as e:
                     print(f"Error fitting: {e}")
-                    return
+                    curveFitSuccess = False
 
                 s0Fit, s0ErrFit, gammaFit, gammaErrFit = popt[0],np.sqrt(pcov[0,0]),popt[1],np.sqrt(pcov[1,1])
-                threeDFitParams = (s0Fit, s0ErrFit, gammaFit, gammaErrFit)
-                print('Curve fitting parameters:\ns0 = %0.2lf +/- %0.2lf\ngamma = %0.2lf +/- %0.2lf\n' %threeDFitParams)
                 bestFitModelCurve = _redshift3dCF_model(sepToPlot, s0Fit, gammaFit)
-                plt.errorbar(sepToFit, CFToFit, CFErrToFit, ls='none',capsize=5,ms=10,marker='o',mew=1.0,mec='black',mfc='black',ecolor='black',elinewidth=1)
 
-                if computeIC:
+                if computeIC is True:
                     print("IC Computation is not coded for 3d...") #TODO
 
             elif cfType == '3d_projected':
@@ -624,29 +577,38 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
                     popt, pcov = curve_fit(_projected3dCF_model, sepToFit, CFToFit, p0=[5.0, 1.8], sigma=sigmaToFit)
                 except Exception as e:
                     print(f"Error fitting: {e}")
-                    return
+                    curveFitSuccess = False
 
                 r0Fit, r0ErrFit, gammaFit, gammaErrFit = popt[0],np.sqrt(pcov[0,0]),popt[1],np.sqrt(pcov[1,1])
-                projectedFitParams = (r0Fit, r0ErrFit, gammaFit, gammaErrFit)
-                print('Curve fitting parameters:\nr0 = %0.2lf +/- %0.2lf\ngamma = %0.2lf +/- %0.2lf\n' %projectedFitParams)
                 bestFitModelCurve = _projected3dCF_model(sepToPlot, r0Fit, gammaFit)
-                plt.errorbar(sepToFit, CFToFit, CFErrToFit, ls='none',capsize=5,ms=10,marker='o',mew=1.0,mec='black',mfc='black',ecolor='black',elinewidth=1)
 
-                if computeIC:
+                if computeIC is True:
                     print("IC Computation is not coded for 3d...") #TODO
 
-            plot_error_ellipse(popt, pcov, param1Lab, param2Lab, figFileName=dirName+os.path.sep+"fig_param_covariance.png")
+            if curveFitSuccess is True:
+                CFFitParamsCurve = popt[0],np.sqrt(pcov[0,0]),popt[1],np.sqrt(pcov[1,1])
+                CFFitParamCovCurve = pcov
+                print('\nCurve fitting parameters:\nr0 = %0.2lf +/- %0.2lf\ngamma = %0.2lf +/- %0.2lf\n' %CFFitParamsCurve)
+                plot_error_ellipse(popt, pcov, param1Lab, param2Lab, figFileName=dirName+os.path.sep+"fig_param_covariance_curvefit.png")
 
-        # PLOTTING
+                bestFitModelCurve, plotLabel = model_curve_plot_label(sepToPlot, CFFitParamsCurve, cfType)
+                plt.plot(sepToPlot, bestFitModelCurve, color='red',label=plotLabel %CFFitParamsCurve+' (Curve fit)')
 
-        plt.errorbar(sepToFit, CFToFit, CFErrToFit,ls='none',capsize=5,ms=10,marker='o',mew=1.0,mec='black',mfc='black',ecolor='black',elinewidth=1)
+                np.savetxt(finalDirPath+os.path.sep+'CF_fit_params_covariance_curvefit.txt', CFFitParamCovCurve, fmt='%f')
+                np.savetxt(finalDirPath+os.path.sep+'CF_fit_params_curvefit.txt', [CFFitParamsCurve], fmt='%f', delimiter='\n')
 
-        bestFitModelCurve, plotLabel = model_curve_plot_label(sepToPlot, CFFitParams, cfType)
-        if SVDDone is True:
-            plotLabel = "SVD Done" + "\n" + plotLabel
-        plt.plot(sepToPlot, bestFitModelCurve, color='red',label=plotLabel %CFFitParams)
+                CFFitParams = CFFitParamsCurve
+                CFFitParamsCov = CFFitParamCovCurve
 
-    plt.title(sampleName)
+    np.savetxt(finalDirPath+os.path.sep+'CF_fit_params.txt', [CFFitParams], fmt='%f', delimiter='\n')
+    np.savetxt(finalDirPath+os.path.sep+'CF_fit_params_covariance.txt', CFFitParamsCov, fmt='%f')
+
+    if plotTitle is None:
+        plotTitle = sampleName
+    if SVDDone is True:
+        plotTitle = sampleName + "\n" + "SVD Done"
+
+    plt.title(plotTitle)
     plt.xscale(plotXScale)
     plt.yscale(plotYScale)
     plt.xlabel(cfXLabel,labelpad=10)
@@ -655,17 +617,11 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
     plt.savefig(cfFigName , dpi=300, bbox_inches = 'tight')
     plt.close()
 
-     # WRITING TO FILES
-
-    #np.savetxt(finalDirPath+os.path.sep+'CF_fit_params_covariance.txt', pcov, fmt='%f')
-    np.savetxt(finalDirPath+os.path.sep+'CF_fit_params.txt', [CFFitParams], fmt='%f', delimiter='\n')
-    np.savetxt(finalDirPath+os.path.sep+'sepFitRange.txt', [sepMinToFit, sepMaxToFit], fmt='%f', delimiter='\n')
-
 
 
     # PLOTTING MCF
 
-    if doMCF:
+    if doMCF is True:
 
         if len(marks) >= 10:
             colors = bp.d3['Category10'][10]+bp.d3['Category10'][10]
@@ -696,7 +652,7 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
 
             ax_now.axhline(y=1, color='black', linestyle='dashed')
 
-        plt.title(sampleName)
+        plt.title(plotTitle)
         plt.xscale(plotXScale)
         plt.xlabel(mcfXLabel,labelpad=10)
         plt.ylabel(mcfYLabel,labelpad=0.5)
@@ -708,5 +664,8 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
         plt.subplots_adjust(hspace=0.0,wspace=0.2)
         plt.savefig(mcfFigName, dpi=300, bbox_inches = 'tight')
         plt.close()
+
+    print("Yeeeee, fitting successfull...!")
+    print("═" * (len(dirName)+50) + "\n")
 
     return None

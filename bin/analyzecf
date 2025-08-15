@@ -86,4 +86,4 @@ if __name__ == '__main__':
     else:
         sepMaxToFit = sepMax
 
-    analyze_cf.do_analyze(cfType=statType, sepMin=sepMin, sepMax=sepMax, sepMinToFit=sepMinToFit, sepMaxToFit=sepMaxToFit, doFit2pcf=doFit2pcf, useFullCovar=useFullCovar, doSvdFilter=doSvdFilter, doHartlapCorr=doHartlapCorr, doMCF=doMCF, dirName=workingDir, plotXScale=plotXScale, plotYScale=plotYScale, computeIC = computeIC, doCurveFit=doCurveFit, doMCMC=doMCMC)
+    analyze_cf.do_analyze(cfType=statType, sepMin=sepMin, sepMax=sepMax, sepMinToFit=sepMinToFit, sepMaxToFit=sepMaxToFit, doFit2pcf=doFit2pcf, useFullCovar=useFullCovar, doSvdFilter=doSvdFilter, doHartlapCorr=doHartlapCorr, doMCF=doMCF, dirName=workingDir, plotXScale=plotXScale, plotYScale=plotYScale, computeIC = computeIC, doCurveFit=True, doMCMC=True)
