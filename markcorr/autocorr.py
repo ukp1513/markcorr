@@ -213,7 +213,7 @@ def compute_cf(cfType, realTab=None, randTab=None, sepMin=0.1, sepMax=10.0, sepN
             for j in range(1, nJacksDec):
                 ax.axhline(y=dec_min + j * dec_step, color='black', linestyle='--', linewidth=0.8)
 
-        ax.legend(markerscale=5)  # Scale legend points
+        ax.legend(markerscale=5, loc=0)  # Scale legend points
 
         plt.savefig(os.path.join(workingDir, "ra_dec.png"), dpi=300, bbox_inches='tight')
         plt.close()

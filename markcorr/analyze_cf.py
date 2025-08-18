@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 import os
 import shutil
 from scipy.optimize import curve_fit
-import bokeh.palettes as bp
 from . import integral_constrain
 from matplotlib.ticker import FormatStrFormatter
 from astropy.table import Table
@@ -230,9 +229,9 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
     dirNameSplit=dirName.split('/')
     sampleName=dirNameSplit[-1].upper()
 
-    print("\n" + "═" * (len(dirName) + 50))
+    print("\n" + "═" * (len(dirName) + 20))
     print("║ Fitting sample %s ║" %dirName)
-    print("═" * (len(dirName) + 50) + "\n")
+    print("═" * (len(dirName) + 20) + "\n")
 
     if doSvdFilter is False:
         print("\nSVD correction NOT done!")
@@ -259,7 +258,7 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
     totalNBins = len(sep)
     nCopies=len([f for f in os.listdir(CFJKDirPath) if not f.startswith('.')])
 
-    print('Nr. of total bins: ', totalNBins)
+    print('\nNr. of total bins: ', totalNBins)
     print('Nr. of jackknife copies: ', nCopies)
 
     CFRealAll = np.empty((totalNBins, nCopies + 2), dtype=float)
@@ -412,10 +411,12 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
 
     # fitting 2pCF
 
+    SVDDone = False
+
     if doFit2pcf is True:
 
         covariancingSuccess = True
-        SVDDone = False
+
         covMatSVD = None
 
         sepToFit = CFRealAllToFit[:, 0]
@@ -600,8 +601,10 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
                 CFFitParams = CFFitParamsCurve
                 CFFitParamsCov = CFFitParamCovCurve
 
-    np.savetxt(finalDirPath+os.path.sep+'CF_fit_params.txt', [CFFitParams], fmt='%f', delimiter='\n')
-    np.savetxt(finalDirPath+os.path.sep+'CF_fit_params_covariance.txt', CFFitParamsCov, fmt='%f')
+                np.savetxt(finalDirPath+os.path.sep+'CF_fit_params.txt', [CFFitParams], fmt='%f', delimiter='\n')
+                np.savetxt(finalDirPath+os.path.sep+'CF_fit_params_covariance.txt', CFFitParamsCov, fmt='%f')
+
+                print("\nYeeeee, fitting successfull...!")
 
     if plotTitle is None:
         plotTitle = sampleName
@@ -623,15 +626,6 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
 
     if doMCF is True:
 
-        if len(marks) >= 10:
-            colors = bp.d3['Category10'][10]+bp.d3['Category10'][10]
-        elif len(marks) >= 3:
-            colors=bp.d3['Category10'][len(marks)]
-        elif len(marks) ==2:
-            colors=['#ff7f0e','#2ca02c']
-        else:
-            colors=['black']
-
         markers=['s','H','v','+','x','d','s','^','p','D','o','h','*','H','v','+','x','d']
 
         fig,ax_now=plt.subplots(nrows=1,ncols=1,sharex=False)
@@ -648,7 +642,7 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
 
             np.savetxt(finalDirPath+os.path.sep+'final_mcf_%s.txt' %mark, np.transpose([sepMcf, markedCf, mcfErr]), fmt='%f', delimiter='\t')
 
-            ax_now.errorbar(sepMcf, markedCf, mcfErr, color=colors[mark_i],capsize=3,ms=6,marker=markers[mark_i],mew=1.0,mec=colors[mark_i],mfc=colors[mark_i],ecolor=colors[mark_i],elinewidth=1,lw=1.0,label="%s" %(marks[mark_i]))
+            ax_now.errorbar(sepMcf, markedCf, mcfErr, capsize=3,ms=6,marker=markers[mark_i],mew=1.0,elinewidth=1,lw=1.0,label="%s" %(marks[mark_i]))
 
             ax_now.axhline(y=1, color='black', linestyle='dashed')
 
@@ -665,7 +659,7 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
         plt.savefig(mcfFigName, dpi=300, bbox_inches = 'tight')
         plt.close()
 
-    print("Yeeeee, fitting successfull...!")
-    print("═" * (len(dirName)+50) + "\n")
+
+    print("═" * (len(dirName)+20) + "\n")
 
     return None
