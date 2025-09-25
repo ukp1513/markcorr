@@ -218,6 +218,22 @@ def compute_cf(cfType, realTab=None, randTab=None, sepMin=0.1, sepMax=10.0, sepN
         plt.savefig(os.path.join(workingDir, "ra_dec.png"), dpi=300, bbox_inches='tight')
         plt.close()
 
+        if '3d' in cfType:
+            fig, ax = plt.subplots()
+            fig.set_size_inches(7, 7)
+
+            # Scatter plot for real and random
+            ax.hist(randTab[randZCol], color='blue', alpha=0.5, density=True, label='Random')
+            ax.hist(realTab[realZCol], color='red', alpha=0.5, density=True, label='Real')
+
+            ax.set_xlabel('Redshift')
+            ax.set_ylabel('Normalised count')
+
+            ax.legend()
+
+            plt.savefig(os.path.join(workingDir, "z_hist.png"), dpi=300, bbox_inches='tight')
+            plt.close()
+
 
     processOutcomes = []
 

@@ -10,6 +10,7 @@ import emcee
 from matplotlib.gridspec import GridSpec
 from scipy.stats import norm
 from matplotlib.patches import Ellipse
+import glob, re
 
 def _covmat_to_corrmat(covariance):
     std_devs = np.sqrt(np.diag(covariance))
@@ -173,7 +174,7 @@ def plot_error_ellipse(popt, pcov, param1Lab, param2Lab=r'$\gamma$', figFileName
         plt.savefig(figFileName, dpi=300, bbox_inches='tight')
     plt.close()
 
-def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=None, doFit2pcf=True, useFullCovar=True, doSvdFilter=False, doHartlapCorr=False, doMCF=True, realProperties=None, dirName=os.getcwd(), plotXScale='log', plotYScale='log', ignoreNegatives = True, computeIC = False, doCurveFit=True, doMCMC=True, plotTitle=None):
+def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=None, doFit2pcf=True, useFullCovar=True, doSvdFilter=False, doHartlapCorr=False, doMCF=True, realProperties=None, dirName=os.getcwd(), plotXScale='log', plotYScale='log', ignoreNegatives = True, computeIC = False, doCurveFit=True, doMCMC=True, plotTitle=None, plotErrorEllipse=True):
 
     biproductDirName = os.path.join(dirName, "biproducts")
     resultsDirName = os.path.join(dirName, "results")
@@ -256,7 +257,11 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
     CFReal = CFRealResult[:,1]
 
     totalNBins = len(sep)
-    nCopies=len([f for f in os.listdir(CFJKDirPath) if not f.startswith('.')])
+
+    JKCFFiles = glob.glob(os.path.join(CFJKDirPath, "CFJackknife_jk*.txt"))
+    JKFileIndexes = sorted(int(os.path.splitext(f)[0].split('jk')[-1]) for f in JKCFFiles)
+
+    nCopies = len(JKFileIndexes)
 
     print('\nNr. of total bins: ', totalNBins)
     print('Nr. of jackknife copies: ', nCopies)
@@ -272,10 +277,10 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
     sepMinToFit = sepMin if sepMinToFit is None else sepMinToFit
     sepMaxToFit = sepMax if sepMaxToFit is None else sepMaxToFit
 
-    for copy in range(nCopies):
-        CFJK = np.loadtxt(os.path.join(CFJKDirPath, 'CFJackknife_jk%d.txt' % (copy + 1)))[:, 1]
-        CFRealAll[:, copy + 2] = CFJK
-
+    for JKIndexi, JKIndex in enumerate(JKFileIndexes):
+        JKFileName = os.path.join(CFJKDirPath, 'CFJackknife_jk%d.txt' % (JKIndex))
+        CFJK = np.loadtxt(JKFileName)[:, 1]
+        CFRealAll[:, JKIndexi + 2] = CFJK
 
     np.savetxt(os.path.join(resultsDirName, "CFRealAll.txt"), CFRealAll,delimiter="\t",fmt='%f')
 
@@ -292,19 +297,16 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
 
         mcfAllMarks = {} # dictionary to carry all the MCFs (including jackknifes) for all marks
 
-        nCopiesTmp = nCopies
         for marki, mark in enumerate(marks):
             mcfReal = CFRealResult[:,marki+2]
             mcfRealAllMarki = np.empty((totalNBins, nCopies+2), dtype=float)
             mcfRealAllMarki[:, 0] = sep
             mcfRealAllMarki[:, 1] = mcfReal
-            for copy in range(nCopiesTmp):
-                try:
-                    mcfJK = np.loadtxt(os.path.join(CFJKDirPath, 'CFJackknife_jk%d.txt' %(copy+1)))[:,marki+2]
-                    mcfRealAllMarki[:, copy+2] = mcfJK
-                except FileNotFoundError:
-                    print("Jackknife copy %d not found." %(copy+1))
-                    nCopies = nCopies-1
+
+            for JKIndexi, JKIndex in enumerate(JKFileIndexes):
+                JKFileName = os.path.join(CFJKDirPath, 'CFJackknife_jk%d.txt' % (JKIndex))
+                mcfJK = np.loadtxt(JKFileName)[:, marki+2]
+                mcfRealAllMarki[:, JKIndexi+2] = mcfJK
 
             # saving each MCF values
             np.savetxt(os.path.join(resultsDirName, "mcfRealAll_%s.txt" %(mark)), mcfRealAllMarki, delimiter="\t",fmt='%f')
@@ -522,8 +524,10 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
                 np.savetxt(finalDirPath+os.path.sep+"CF_MCMC_chain.txt", samples)
                 np.savetxt(finalDirPath+os.path.sep+'CF_fit_params_MCMC.txt', [CFFitParamsMCMC], fmt='%f', delimiter='\n')
                 np.savetxt(finalDirPath+os.path.sep+'CF_fit_params_covariance_MCMC.txt', CFFitParamsCovMCMC, fmt='%f')
+
                 #plot_posterior(samples, param1Lab, param2Lab, figFileName=dirName+os.path.sep+"fig_param_covariance_mcmc.png")
-                plot_error_ellipse([param1Best, param2Best], CFFitParamsCovMCMC, param1Lab, param2Lab, figFileName=dirName+os.path.sep+"fig_param_covariance_MCMC.png")
+                if plotErrorEllipse is True:
+                    plot_error_ellipse([param1Best, param2Best], CFFitParamsCovMCMC, param1Lab, param2Lab, figFileName=dirName+os.path.sep+"fig_param_covariance_MCMC.png")
 
                 bestFitModelMCMC, plotLabel = model_curve_plot_label(sepToPlot, CFFitParamsMCMC, cfType)
                 plt.plot(sepToPlot, bestFitModelMCMC, color='blue',label=plotLabel %CFFitParamsMCMC+' (MCMC)')
@@ -590,7 +594,8 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
                 CFFitParamsCurve = popt[0],np.sqrt(pcov[0,0]),popt[1],np.sqrt(pcov[1,1])
                 CFFitParamCovCurve = pcov
                 print('\nCurve fitting parameters:\nr0 = %0.2lf +/- %0.2lf\ngamma = %0.2lf +/- %0.2lf\n' %CFFitParamsCurve)
-                plot_error_ellipse(popt, pcov, param1Lab, param2Lab, figFileName=dirName+os.path.sep+"fig_param_covariance_curvefit.png")
+                if plotErrorEllipse is True:
+                    plot_error_ellipse(popt, pcov, param1Lab, param2Lab, figFileName=dirName+os.path.sep+"fig_param_covariance_curvefit.png")
 
                 bestFitModelCurve, plotLabel = model_curve_plot_label(sepToPlot, CFFitParamsCurve, cfType)
                 plt.plot(sepToPlot, bestFitModelCurve, color='red',label=plotLabel %CFFitParamsCurve+' (Curve fit)')
@@ -626,7 +631,7 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
 
     if doMCF is True:
 
-        markers=['s','H','v','+','x','d','s','^','p','D','o','h','*','H','v','+','x','d']
+        markers=['s','o','v','^','D','x','d','*','H','s','^','p','D','o','h','*','H','v','+','x','d']
 
         fig,ax_now=plt.subplots(nrows=1,ncols=1,sharex=False)
         fig.set_size_inches(5,5)
