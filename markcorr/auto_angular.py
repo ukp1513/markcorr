@@ -2,8 +2,13 @@ import numpy as np
 from scipy.stats import rankdata
 from astropy.table import Table
 import gundam as gun
+from nugundam import acf, AngularAutoConfig, CatalogColumns, AngularBinning, AngularGridSpec, WeightSpec
+import os
 
-def omega_theta(raReal, decReal, raRand, decRand, thMin, thNBins, thBinWidth, doBoot=False):
+NCORES = os.cpu_count() or 1
+NTHREADS = max(1, int(0.8 * NCORES))
+
+def omega_theta_oldgundam(raReal, decReal, raRand, decRand, thMin, thNBins, thBinWidth, doBoot=False):
 
     gals = Table([raReal, decReal], names=('ra', 'dec'))
     rans = Table([raRand, decRand], names=('ra', 'dec'))
@@ -20,20 +25,71 @@ def omega_theta(raReal, decReal, raRand, decRand, thMin, thNBins, thBinWidth, do
 
     return th, omega, omegaErr
 
-def weighted_omega_theta(raReal, decReal, weightReal, raRand, decRand, thMin, thNBins, thBinWidth, doBoot=False):
+def weighted_omega_theta_oldgundam(raReal, decReal, weightReal, raRand, decRand, thMin, thNBins, thBinWidth, doBoot=False):
 
     gals = Table([raReal, decReal], names=('ra', 'dec'))
     rans = Table([raRand, decRand], names=('ra', 'dec'))
 
     par = gun.packpars(kind='acf', nsept=int(thNBins), septmin=thMin, dsept=thBinWidth, logsept=True, estimator='LS', doboot=doBoot)
 
-    gals['wei'] = weightReal/np.mean(weightReal) # gundam does not normalize the weight inside it.
+    gals['wei'] = weightReal/np.mean(weightReal) # gundam does not normalize the weight inside it. 
     rans['wei'] = 1.
 
     result = gun.acf(gals, rans, par, write=False)
     th = result['thm']
     weightedOmega = result['wth']
     weightedOmegaErr = result['wtherr'] if doBoot else None
+
+    return th, weightedOmega, weightedOmegaErr
+
+def omega_theta(raReal, decReal, raRand, decRand, thMin, thNBins, thBinWidth, doBoot=False):
+
+    gals = Table([raReal, decReal], names=('ra', 'dec'))
+    rans = Table([raRand, decRand], names=('ra', 'dec'))
+
+    config = AngularAutoConfig(estimator = "LS", 
+                               columns_data=CatalogColumns(ra='ra', dec='dec'),
+                               columns_random=CatalogColumns(ra='ra', dec='dec'),
+                               binning=AngularBinning.from_binsize(nsep=int(thNBins),
+                                                                   sepmin=thMin,
+                                                                   dsep=thBinWidth,
+                                                                   logsep=True),
+                               grid=AngularGridSpec(autogrid=True, pxorder="cell-dec"),
+                               weights = WeightSpec(weight_mode="unweighted"),
+                               nthreads=NTHREADS,
+    )
+
+    result = acf(gals, rans, config)
+    th = result.theta_centers
+    omega = result.wtheta
+    omegaErr = result.wtheta_err if doBoot else None
+
+    return th, omega, omegaErr
+
+def weighted_omega_theta(raReal, decReal, weightReal, raRand, decRand, thMin, thNBins, thBinWidth, doBoot=False):
+
+    gals = Table([raReal, decReal], names=('ra', 'dec'))
+    rans = Table([raRand, decRand], names=('ra', 'dec'))
+
+    gals['wei'] = weightReal # nugundam normalizes the weight inside it.
+    rans['wei'] = 1.
+
+    config = AngularAutoConfig(estimator = "LS", 
+                               columns_data=CatalogColumns(ra='ra', dec='dec'),
+                               columns_random=CatalogColumns(ra='ra', dec='dec'),
+                               binning=AngularBinning.from_binsize(nsep=int(thNBins),
+                                                                   sepmin=thMin,
+                                                                   dsep=thBinWidth,
+                                                                   logsep=True),
+                               grid=AngularGridSpec(autogrid=True, pxorder="cell-dec"),
+                               weights = WeightSpec(weight_mode="weighted", data_col="wei"),
+                               nthreads=NTHREADS,
+    )
+
+    result = acf(gals, rans, config)    
+    th = result.theta_centers
+    weightedOmega = result.wtheta
+    weightedOmegaErr = result.wtheta_err if doBoot else None
 
     return th, weightedOmega, weightedOmegaErr
 
@@ -49,7 +105,7 @@ def do_compute(realTab, realProperties, randTab, thMin, thNBins, thBinWidth, doR
     raRand = randTab[randRaCol]
     decRand = randTab[randDecCol]
 
-    th, omega, _ = omega_theta(raReal, decReal, raRand, decRand, thMin, thNBins, thBinWidth, doBoot=doBoot)
+    th, omega, _ = omega_theta_oldgundam(raReal, decReal, raRand, decRand, thMin, thNBins, thBinWidth, doBoot=doBoot)
 
     thOmegaMcfs = np.empty((len(th), 0))
 
@@ -68,7 +124,7 @@ def do_compute(realTab, realProperties, randTab, thMin, thNBins, thBinWidth, doR
             else:
                 weightReal = propNow
 
-            th, weightedOmega, _ = weighted_omega_theta(raReal, decReal, weightReal, raRand, decRand, thMin, thNBins, thBinWidth, doBoot=doBoot)
+            th, weightedOmega, _ = weighted_omega_theta_oldgundam(raReal, decReal, weightReal, raRand, decRand, thMin, thNBins, thBinWidth, doBoot=doBoot)
 
             MThetaArray = np.array(mcf_theta(omega, weightedOmega)).reshape(len(th), 1)
 
