@@ -105,7 +105,7 @@ def do_compute(realTab, realProperties, randTab, thMin, thNBins, thBinWidth, doR
     raRand = randTab[randRaCol]
     decRand = randTab[randDecCol]
 
-    th, omega, _ = omega_theta_oldgundam(raReal, decReal, raRand, decRand, thMin, thNBins, thBinWidth, doBoot=doBoot)
+    th, omega, _ = omega_theta(raReal, decReal, raRand, decRand, thMin, thNBins, thBinWidth, doBoot=doBoot)
 
     thOmegaMcfs = np.empty((len(th), 0))
 
@@ -124,7 +124,7 @@ def do_compute(realTab, realProperties, randTab, thMin, thNBins, thBinWidth, doR
             else:
                 weightReal = propNow
 
-            th, weightedOmega, _ = weighted_omega_theta_oldgundam(raReal, decReal, weightReal, raRand, decRand, thMin, thNBins, thBinWidth, doBoot=doBoot)
+            th, weightedOmega, _ = weighted_omega_theta(raReal, decReal, weightReal, raRand, decRand, thMin, thNBins, thBinWidth, doBoot=doBoot)
 
             MThetaArray = np.array(mcf_theta(omega, weightedOmega)).reshape(len(th), 1)
 
