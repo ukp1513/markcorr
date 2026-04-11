@@ -12,7 +12,7 @@ def _process_jackknife(args):
 
     jki, cfTypeArg, realTabArg, realPropertiesArg, randTabArg, sepMinArg, sepNbinsArg, sepBinWidthArg, sep2NbinsArg, sep2BinWidthArg, doRankingArg, \
     realRaColArg, realDecColArg, realZColArg, randRaColArg, randDecColArg, randZColArg, jackknifeSamplesArg, workingDir, cosmology_H0_Om0Arg, \
-    weight_w_theta, weight_col, doParallelGundam = args
+    weight_w_theta, weight_col, doParallelGundam, weight_col_mode = args
 
     try:
         if jki == 0:
@@ -27,15 +27,15 @@ def _process_jackknife(args):
         resulti = None
 
         if cfTypeArg == 'angular':
-            resulti = auto_angular.do_compute(realTabi, realPropertiesArg, randTabi, sepMinArg, sepNbinsArg, sepBinWidthArg, doRankingArg, 
+            resulti = auto_angular.do_compute(realTabi, realPropertiesArg, randTabi, sepMinArg, sepNbinsArg, sepBinWidthArg, doRankingArg,
                                               realRaColArg, realDecColArg, randRaColArg, randDecColArg,
-                                               doBoot=False, weight_w_theta = weight_w_theta, weight_col = weight_col, doParallelGundam=doParallelGundam)
+                                               doBoot=False, weight_w_theta = weight_w_theta, weight_col = weight_col, doParallelGundam=doParallelGundam, weight_col_mode=weight_col_mode)
         elif cfTypeArg == '3d_redshift':
-            resulti = auto_threeD.do_compute(realTabi, realPropertiesArg, randTabi, sepMinArg, sepNbinsArg, sepBinWidthArg, doRankingArg, 
+            resulti = auto_threeD.do_compute(realTabi, realPropertiesArg, randTabi, sepMinArg, sepNbinsArg, sepBinWidthArg, doRankingArg,
                                              realRaColArg, realDecColArg, realZColArg, randRaColArg,
                                             randDecColArg, randZColArg, cosmology_H0_Om0Arg)
         elif cfTypeArg == '3d_projected':
-            resulti = auto_projected.do_compute(realTabi, realPropertiesArg, randTabi, sepMinArg, sepNbinsArg, sepBinWidthArg, sep2NbinsArg, 
+            resulti = auto_projected.do_compute(realTabi, realPropertiesArg, randTabi, sepMinArg, sepNbinsArg, sepBinWidthArg, sep2NbinsArg,
                                                 sep2BinWidthArg, doRankingArg,
                                               realRaColArg, realDecColArg, realZColArg, randRaColArg, randDecColArg, randZColArg, cosmology_H0_Om0Arg)
 
@@ -47,10 +47,10 @@ def _process_jackknife(args):
 
     return 0
 
-def compute_cf(cfType, realTab=None, randTab=None, sepMin=0.1, sepMax=10.0, sepNbins=None, sepBinWidth=None, sep2Min=None, sep2Max=None, 
-               sep2Nbins=None, sep2BinWidth=None, nJacksRa=0, nJacksDec=0, workingDir=os.getcwd(), realRaCol='RA',realDecCol='DEC', realZCol=None, 
-               randRaCol='RA', randDecCol='Dec', randZCol=None, doParallel=False, cosmology_H0_Om0=None, 
-               doMCF=False, realProperties=None, doRanking=True, makePlots=True, weight_w_theta = False, weight_col = None):
+def compute_cf(cfType, realTab=None, randTab=None, sepMin=0.1, sepMax=10.0, sepNbins=None, sepBinWidth=None, sep2Min=None, sep2Max=None,
+               sep2Nbins=None, sep2BinWidth=None, nJacksRa=0, nJacksDec=0, workingDir=os.getcwd(), realRaCol='RA',realDecCol='DEC', realZCol=None,
+               randRaCol='RA', randDecCol='Dec', randZCol=None, doParallel=False, cosmology_H0_Om0=None,
+               doMCF=False, realProperties=None, doRanking=True, makePlots=True, weight_w_theta = False, weight_col = None, weight_col_mode=None):
 
     cfAutoCrossLabel = 'auto'
 
@@ -254,7 +254,7 @@ def compute_cf(cfType, realTab=None, randTab=None, sepMin=0.1, sepMax=10.0, sepN
         for jki in range(nJacks + 1):
             argsToPass = (jki, cfType, realTab, realProperties, randTab, sepMin, sepNbins, sepBinWidth, sep2Nbins, sep2BinWidth, doRanking, \
                           realRaCol, realDecCol, realZCol, randRaCol, randDecCol, randZCol, jackknifeSamples, workingDir, cosmology_H0_Om0, \
-                          weight_w_theta, weight_col)
+                          weight_w_theta, weight_col, weight_col_mode)
             tasks.append(argsToPass)
 
         with Pool(processes=numProcesses) as pool:
@@ -264,7 +264,7 @@ def compute_cf(cfType, realTab=None, randTab=None, sepMin=0.1, sepMax=10.0, sepN
         for jki in range(nJacks+1):
             argsToPass = (jki, cfType, realTab, realProperties, randTab, sepMin, sepNbins, sepBinWidth, sep2Nbins, sep2BinWidth, doRanking, \
                           realRaCol, realDecCol, realZCol, randRaCol, randDecCol, randZCol, jackknifeSamples, \
-                          workingDir, cosmology_H0_Om0, weight_w_theta, weight_col, doParallelGundam)
+                          workingDir, cosmology_H0_Om0, weight_w_theta, weight_col, doParallelGundam, weight_col_mode)
             outcome = _process_jackknife(argsToPass)
             processOutcomes.append(outcome)
 
