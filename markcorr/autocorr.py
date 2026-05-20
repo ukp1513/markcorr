@@ -40,15 +40,15 @@ def _process_jackknife(args):
         resulti = None
 
         if cfTypeArg == 'angular':
-            resulti = auto_angular.do_compute(realTabi, realPropertiesArg, randTabi, sepMinArg, sepNbinsArg, sepBinWidthArg, doRankingArg, 
+            resulti = auto_angular.do_compute(realTabi, realPropertiesArg, randTabi, sepMinArg, sepNbinsArg, sepBinWidthArg, doRankingArg,
                                               realRaColArg, realDecColArg, randRaColArg, randDecColArg,
                                                doBoot=False, weight_w_theta = weight_w_theta, weight_col = weight_col, doParallelGundam=doParallelGundam)
         elif cfTypeArg == '3d_redshift':
-            resulti = auto_threeD.do_compute(realTabi, realPropertiesArg, randTabi, sepMinArg, sepNbinsArg, sepBinWidthArg, doRankingArg, 
+            resulti = auto_threeD.do_compute(realTabi, realPropertiesArg, randTabi, sepMinArg, sepNbinsArg, sepBinWidthArg, doRankingArg,
                                              realRaColArg, realDecColArg, realZColArg, randRaColArg,
                                             randDecColArg, randZColArg, cosmology_H0_Om0Arg)
         elif cfTypeArg == '3d_projected':
-            resulti = auto_projected.do_compute(realTabi, realPropertiesArg, randTabi, sepMinArg, sepNbinsArg, sepBinWidthArg, sep2NbinsArg, 
+            resulti = auto_projected.do_compute(realTabi, realPropertiesArg, randTabi, sepMinArg, sepNbinsArg, sepBinWidthArg, sep2NbinsArg,
                                                 sep2BinWidthArg, doRankingArg,
                                               realRaColArg, realDecColArg, realZColArg, randRaColArg, randDecColArg, randZColArg, cosmology_H0_Om0Arg)
 

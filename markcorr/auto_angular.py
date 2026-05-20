@@ -25,7 +25,7 @@ def omega_theta(raReal, decReal, raRand, decRand, thMin, thNBins, thBinWidth,
     else:
         nthreads = 1
 
-    config = AngularAutoConfig(estimator = "LS", 
+    config = AngularAutoConfig(estimator = "LS",
                                columns_data=CatalogColumns(ra='ra', dec='dec'),
                                columns_random=CatalogColumns(ra='ra', dec='dec'),
                                binning=AngularBinning.from_binsize(nsep=int(thNBins),
@@ -44,7 +44,7 @@ def omega_theta(raReal, decReal, raRand, decRand, thMin, thNBins, thBinWidth,
 
     return th, omega, omegaErr
 
-def weighted_omega_theta(raReal, decReal, weightReal, raRand, decRand, thMin, thNBins, 
+def weighted_omega_theta(raReal, decReal, weightReal, raRand, decRand, thMin, thNBins,
                          thBinWidth, doBoot=False, doParallelGundam=False):
 
     gals = Table([raReal, decReal], names=('ra', 'dec'))
@@ -57,7 +57,7 @@ def weighted_omega_theta(raReal, decReal, weightReal, raRand, decRand, thMin, th
         ncores = os.cpu_count() or 1
         nthreads = max(1, int(0.8 * ncores))
 
-    config = AngularAutoConfig(estimator = "LS", 
+    config = AngularAutoConfig(estimator = "LS",
                                columns_data=CatalogColumns(ra='ra', dec='dec'),
                                columns_random=CatalogColumns(ra='ra', dec='dec'),
                                binning=AngularBinning.from_binsize(nsep=int(thNBins),
@@ -69,7 +69,7 @@ def weighted_omega_theta(raReal, decReal, weightReal, raRand, decRand, thMin, th
                                nthreads=nthreads,
     )
 
-    result = acf(gals, rans, config)    
+    result = acf(gals, rans, config)
     th = result.theta_centers
     weightedOmega = result.wtheta
     weightedOmegaErr = result.wtheta_err if doBoot else None
