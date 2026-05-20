@@ -3,5 +3,5 @@ matplotlib
 scipy
 astropy
 treecorr
-gundam
+nugundam
 pandas

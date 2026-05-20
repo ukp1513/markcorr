@@ -273,7 +273,7 @@ def do_analyze(cfType, sepMin=None, sepMax=None, sepMinToFit=None, sepMaxToFit=N
 
     # setting min and max seps to analyze if not given
     sepMin = sep[0] if sepMin is None else sepMin
-    sepMax = sep[1] if sepMax is None else sepMax
+    sepMax = sep[-1] if sepMax is None else sepMax
     sepMinToFit = sepMin if sepMinToFit is None else sepMinToFit
     sepMaxToFit = sepMax if sepMaxToFit is None else sepMaxToFit
 

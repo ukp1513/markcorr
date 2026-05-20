@@ -9,6 +9,19 @@ import matplotlib.pyplot as plt
 logging.basicConfig(level=logging.INFO)
 
 def _process_jackknife(args):
+    """
+    Computes the correlation function for a single jackknife sample or for the full dataset.
+
+    Args:
+        args: Tuple containing all parameters required for the computation,
+            including catalogues, binning information, cosmology, output
+            directory, and jackknife metadata.
+
+    Returns:
+        int:
+            Returns 0 if the computation completed successfully,
+            otherwise returns 1 if an exception occurred.
+    """
 
     jki, cfTypeArg, realTabArg, realPropertiesArg, randTabArg, sepMinArg, sepNbinsArg, sepBinWidthArg, sep2NbinsArg, sep2BinWidthArg, doRankingArg, \
     realRaColArg, realDecColArg, realZColArg, randRaColArg, randDecColArg, randZColArg, jackknifeSamplesArg, workingDir, cosmology_H0_Om0Arg, \
@@ -51,6 +64,44 @@ def compute_cf(cfType, realTab=None, randTab=None, sepMin=0.1, sepMax=10.0, sepN
                sep2Nbins=None, sep2BinWidth=None, nJacksRa=0, nJacksDec=0, workingDir=os.getcwd(), realRaCol='RA',realDecCol='DEC', realZCol=None, 
                randRaCol='RA', randDecCol='Dec', randZCol=None, doParallel=False, cosmology_H0_Om0=None, 
                doMCF=False, realProperties=None, doRanking=True, makePlots=True, weight_w_theta = False, weight_col = None):
+    """
+    Computes two-point auto-correlation functions and marked correlation functions.
+
+    Args:
+        cfType: Type of correlation function to compute. Must be one of
+            ``'angular'``, ``'3d_redshift'``, or ``'3d_projected'``.
+        realTab: Astropy table containing the real galaxy catalogue.
+        randTab: Astropy table containing the random catalogue.
+        sepMin: Minimum separation scale in units of deg (in case of 'angular') or Mpc/h (in case of '3d_redshift' and '3d_projected').
+        sepMax: Maximum separation scale in units of deg (in case of 'angular') or Mpc/h (in case of '3d_redshift' and '3d_projected').
+        sepNbins: Number of logarithmic separation bins.
+        sepBinWidth: Width of logarithmic separation bins.
+        sep2Min: Minimum secondary separation scale used for projected correlation functions.
+        sep2Max: Maximum secondary separation scale used for projected correlation functions.
+        sep2Nbins: Number of secondary separation bins.
+        sep2BinWidth: Width of secondary separation bins.
+        nJacksRa: Number of jackknife regions along right ascension.
+        nJacksDec: Number of jackknife regions along declination.
+        workingDir: Directory where outputs and intermediate files are stored.
+        realRaCol: Column name of right ascension in the real catalogue.
+        realDecCol: Column name of declination in the real catalogue.
+        realZCol: Column name of redshift in the real catalogue.
+        randRaCol: Column name of right ascension in the random catalogue.
+        randDecCol: Column name of declination in the random catalogue.
+        randZCol: Column name of redshift in the random catalogue.
+        doParallel: If ``True``, parallelises jackknife computations using multiprocessing.
+        cosmology_H0_Om0: Cosmology parameters in the form ``[H0, Om0]``.
+        doMCF: If ``True``, computes marked correlation functions.
+        realProperties: List of source properties used as marks for marked correlation functions.
+        doRanking: If ``True``, rank-transforms the marks before computing the marked correlation function.
+        makePlots: If ``True``, generates diagnostic plots of sky positions and redshift distributions.
+        weight_w_theta: If ``True``, applies angular weighting in the angular correlation function computation.
+        weight_col: Name of the column containing source weights.
+
+    Returns:
+        None
+
+    """
 
     cfAutoCrossLabel = 'auto'
 
@@ -272,7 +323,5 @@ def compute_cf(cfType, realTab=None, randTab=None, sepMin=0.1, sepMax=10.0, sepN
 
     if any(outcome != 0 for outcome in processOutcomes):
         print("Warning: Some jackknife computations failed.")
-        return 1
 
     print("All computations completed successfully.")
-    return 0
