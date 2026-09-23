@@ -298,6 +298,7 @@ def compute_cf(cfType, realTab=None, randTab=None, sepMin=0.1, sepMax=10.0, sepN
     processOutcomes = []
 
     if doParallel:
+        doParallelGundam = False
         numProcesses = int(0.8*cpu_count())
         print("Parallelizing with %d processes..." %numProcesses)
 
@@ -305,7 +306,7 @@ def compute_cf(cfType, realTab=None, randTab=None, sepMin=0.1, sepMax=10.0, sepN
         for jki in range(nJacks + 1):
             argsToPass = (jki, cfType, realTab, realProperties, randTab, sepMin, sepNbins, sepBinWidth, sep2Nbins, sep2BinWidth, doRanking, \
                           realRaCol, realDecCol, realZCol, randRaCol, randDecCol, randZCol, jackknifeSamples, workingDir, cosmology_H0_Om0, \
-                          weight_w_theta, weight_col)
+                          weight_w_theta, weight_col, doParallelGundam)
             tasks.append(argsToPass)
 
         with Pool(processes=numProcesses) as pool:

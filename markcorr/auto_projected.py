@@ -211,7 +211,8 @@ def do_compute(realTab, realProperties, randTab, rpMin, rpNBins, rpBinWidth, piN
     decRand = randTab[randDecCol]
     zRand = randTab[randZCol]
 
-    rp, omegaP, _ = omegap_rp(raReal, decReal, zReal, raRand, decRand, zRand, rpMin, rpNBins, rpBinWidth, piNBins, piBinWidth, cosmologyH0Om0, doBoot=doBoot)
+    rp, omegaP, _ = omegap_rp(raReal, decReal, zReal, raRand, decRand, zRand, rpMin, rpNBins, rpBinWidth, piNBins, piBinWidth, 
+                              cosmologyH0Om0, doBoot=doBoot)
 
     rpOmegaMcfs = np.empty((len(rp), 0))
 
@@ -229,7 +230,9 @@ def do_compute(realTab, realProperties, randTab, rpMin, rpNBins, rpBinWidth, piN
             else:
                 weightReal = propNow
 
-            rp, weightedOmega, _ = weighted_omegap_rp(raReal, decReal, zReal, weightReal, raRand, decRand, zRand, rpMin, rpNBins, rpBinWidth, piNBins, piBinWidth, cosmologyH0Om0, doBoot=doBoot)
+            rp, weightedOmega, _ = weighted_omegap_rp(raReal, decReal, zReal, weightReal, raRand, decRand, zRand, 
+                                                      rpMin, rpNBins, rpBinWidth, piNBins, piBinWidth, cosmologyH0Om0, 
+                                                      doBoot=doBoot)
 
             MpRpArray = np.array(mcf_rp(rp, omegaP, weightedOmega)).reshape(len(rp), 1)
 

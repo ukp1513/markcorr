@@ -2,30 +2,37 @@ from multiprocessing import Pool, cpu_count
 import numpy as np
 import os
 import logging
-from . import utils, jackknife_generator, cross_angular
+from . import utils, jackknife_generator, gen_angular
 from astropy.table import Table
 
 logging.basicConfig(level=logging.INFO)
 
 def _process_jackknife(args):
 
-    jki, cfTypeArg, realTab1Arg, realTab2Arg, randTab1Arg, randTab2Arg, sepMinArg, sepNbinsArg, sepBinWidthArg, sep2NbinsArg, sep2BinWidthArg, doRankingArg, realRaCol1Arg, realDecCol1Arg, realZCol1Arg, randRaCol1Arg, randDecCol1Arg, randZCol1Arg, realRaCol2Arg, realDecCol2Arg, realZCol2Arg, randRaCol2Arg, randDecCol2Arg, randZCol2Arg,  jackknifeSamples1Arg, jackknifeSamples2Arg, workingDir, cosmology_H0_Om0Arg = args
+    jki, cfTypeArg, realTab1Arg, realTab2Arg, randTabArg, sepMinArg, sepNbinsArg, sepBinWidthArg, sep2NbinsArg, sep2BinWidthArg, \
+        doRankingArg, realRaCol1Arg, realDecCol1Arg, realZCol1Arg, realRaCol2Arg, realDecCol2Arg, realZCol2Arg, \
+            randRaColArg, randDecColArg, randZColArg, jackknifeSamples1Arg, jackknifeSamples2Arg, workingDir, cosmology_H0_Om0Arg, \
+                 weight_w_theta, weightCol1Arg, weightCol2Arg, realPropertiesArg, doParallelGundam, doBoot = args
 
     resulti = None
 
     try:
         if jki == 0:
-            realTab1i, randTab1i, realTab2i, randTab2i = realTab1Arg, randTab1Arg, realTab2Arg, randTab2Arg
+            realTab1i, realTab2i, randTabi = realTab1Arg, realTab2Arg, randTabArg
             resultFile = os.path.join(workingDir, 'results', 'CFReal.txt')
-            print("Working on the real sample: Nreal_1 = %d, Nrand_1 = %d, Nreal_2 = %d, Nrand_2 = %d" %(len(realTab1i), len(randTab1i), len(realTab2i), len(randTab2i)))
+            print("Working on the real sample: Nreal_1 = %d, Nreal_2 = %d, Nrand = %d" %(len(realTab1i), len(realTab2i), len(randTabi)))
         else:
-            realTab1i, randTab1i = jackknifeSamples1Arg[jki - 1]
-            realTab2i, randTab2i = jackknifeSamples2Arg[jki - 1]
+            realTab1i, randTabi = jackknifeSamples1Arg[jki - 1]
+            realTab2i, randTabi = jackknifeSamples2Arg[jki - 1]
             resultFile = os.path.join(workingDir, 'results', 'jackknifes', 'CFJackknife_jk%d.txt' %jki)
-            print("Working on the jackknife sample %d: Nreal_1 = %d, Nrand_1 = %d, Nreal_2 = %d, Nrand_2 = %d" %(jki, len(realTab1i), len(randTab1i), len(realTab2i), len(randTab2i)))
+            print("Working on the jackknife sample %d: Nreal_1 = %d, Nreal_2 = %d, Nrand = %d = %d" %(jki, len(realTab1i), len(realTab2i), len(randTabi)))
+
 
         if cfTypeArg == 'angular':
-            resulti = cross_angular.do_compute(realTab1i, realTab2i, randTab1i, randTab2i, sepMinArg, sepNbinsArg, sepBinWidthArg, doRankingArg, realRaCol1Arg, realDecCol1Arg, randRaCol1Arg, randDecCol1Arg, realRaCol2Arg, realDecCol2Arg, randRaCol2Arg, randDecCol2Arg)
+            resulti = gen_angular.do_compute(realTab1i, realTab2i, randTabi, sepMinArg, sepNbinsArg, sepBinWidthArg, doRankingArg, 
+                                             realRaCol1Arg, realDecCol1Arg, realRaCol2Arg, realDecCol2Arg, randRaColArg, randDecColArg,
+                                             doBoot=doBoot, weight_col1 = weightCol1Arg, weight_col2=weightCol2Arg, realProperties=realPropertiesArg, 
+                                             doParallelGundam=doParallelGundam)
         elif cfTypeArg == '3d_redshift':
             raise ValueError("3d_reshift crosscf is not implemented yet!")
         elif cfTypeArg == '3d_projected':
@@ -39,7 +46,13 @@ def _process_jackknife(args):
 
     return 0
 
-def compute_cf(cfType, realTab1=None, realTab2=None, randTab1=None, randTab2=None, sepMin=0.1, sepMax=10.0, sepNbins=None, sepBinWidth=None, sep2Min=0.0, sep2Max=40.0, sep2Nbins=None, sep2BinWidth=None, nJacksRa=0, nJacksDec=0, workingDir=os.getcwd(), realRaCol1='RA',realDecCol1='DEC', realZCol1=None, randRaCol1='RA', randDecCol1='Dec', randZCol1=None, realRaCol2='RA',realDecCol2='DEC', realZCol2=None, randRaCol2='RA', randDecCol2='Dec', randZCol2=None, doParallel=False, cosmology_H0_Om0=None, doMCF=False, realProperties=None, doRanking=True):
+def compute_cf(cfType, realTab1=None, realTab2=None, randTab=None, sepMin=0.1, sepMax=10.0, sepNbins=None, 
+               sepBinWidth=None, sep2Min=0.0, sep2Max=40.0, sep2Nbins=None, sep2BinWidth=None, 
+               nJacksRa=0, nJacksDec=0, workingDir=os.getcwd(), 
+               realRaCol1='RA',realDecCol1='DEC', realZCol1=None, 
+               realRaCol2='RA',realDecCol2='DEC', realZCol2=None,
+               randRaCol='RA', randDecCol='Dec', randZCol=None, 
+               doParallel=False, cosmology_H0_Om0=None, doMCF=False, realProperties=None, doRanking=True):
 
     cfAutoCrossLabel = 'cross'
 
@@ -68,13 +81,6 @@ def compute_cf(cfType, realTab1=None, realTab2=None, randTab1=None, randTab2=Non
         else:
             realTab1 = None
 
-    if randTab1 is None:
-        GalFile = os.path.join(workingDir, 'random_galaxies1')
-        if os.path.exists(GalFile):
-            randTab1 = Table.read(GalFile, format='ascii')
-        else:
-            randTab1 = None
-
     if realTab2 is None:
         GalFile = os.path.join(workingDir, 'real_galaxies2')
         if os.path.exists(GalFile):
@@ -82,14 +88,14 @@ def compute_cf(cfType, realTab1=None, realTab2=None, randTab1=None, randTab2=Non
         else:
             realTab2 = None
 
-    if randTab2 is None:
-        GalFile = os.path.join(workingDir, 'random_galaxies2')
+    if randTab is None:
+        GalFile = os.path.join(workingDir, 'random_galaxies')
         if os.path.exists(GalFile):
-            randTab2 = Table.read(GalFile, format='ascii')
+            randTab = Table.read(GalFile, format='ascii')
         else:
-            randTab2 = None
+            randTab = None
 
-    if realTab1 is None or realTab2 is None or randTab1 is None or randTab2 is None:
+    if realTab1 is None or randTab is None:
         raise ValueError("Real and random catalogues are to be given")
 
     # setting bins in th, s, or rp (in log scale)
