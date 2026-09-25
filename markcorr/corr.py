@@ -10,22 +10,29 @@ logging.basicConfig(level=logging.INFO)
 def _process_jackknife(args):
 
     jki, cfTypeArg, realTab1Arg, realTab2Arg, randTabArg, sepMinArg, sepNbinsArg, sepBinWidthArg, sep2NbinsArg, sep2BinWidthArg, \
-        doRankingArg, realRaCol1Arg, realDecCol1Arg, realZCol1Arg, realRaCol2Arg, realDecCol2Arg, realZCol2Arg, \
-            randRaColArg, randDecColArg, randZColArg, jackknifeSamples1Arg, jackknifeSamples2Arg, workingDir, cosmology_H0_Om0Arg, \
-                 weight_w_theta, weightCol1Arg, weightCol2Arg, realPropertiesArg, doParallelGundam, doBoot = args
+        doRankingArg, realRaCol1Arg, realDecCol1Arg, realZCol1Arg, randRaColArg, randDecColArg, randZColArg, \
+             realRaCol2Arg, realDecCol2Arg, realZCol2Arg, jackknifeSamples1Arg, jackknifeSamples2Arg, workingDir, cosmology_H0_Om0Arg, \
+                 weightCol1Arg, weightCol2Arg, realPropertiesArg, doParallelGundam, doBoot = args
 
     resulti = None
+
+    nReal1 = len(realTab1Arg)
+    nReal2 = len(realTab2Arg) if realTab2Arg is not None else 0
+    nRand = len(randTabArg)
 
     try:
         if jki == 0:
             realTab1i, realTab2i, randTabi = realTab1Arg, realTab2Arg, randTabArg
             resultFile = os.path.join(workingDir, 'results', 'CFReal.txt')
-            print("Working on the real sample: Nreal_1 = %d, Nreal_2 = %d, Nrand = %d" %(len(realTab1i), len(realTab2i), len(randTabi)))
+            print("Working on the real sample: Nreal_1 = %d, Nreal_2 = %d, Nrand = %d" %(nReal1, nReal2, nRand))
         else:
             realTab1i, randTabi = jackknifeSamples1Arg[jki - 1]
-            realTab2i, randTabi = jackknifeSamples2Arg[jki - 1]
+            if jackknifeSamples2Arg is not None:
+                realTab2i, _ = jackknifeSamples2Arg[jki - 1]
+            else:
+                realTab2i = None
             resultFile = os.path.join(workingDir, 'results', 'jackknifes', 'CFJackknife_jk%d.txt' %jki)
-            print("Working on the jackknife sample %d: Nreal_1 = %d, Nreal_2 = %d, Nrand = %d = %d" %(jki, len(realTab1i), len(realTab2i), len(randTabi)))
+            print("Working on the jackknife sample %d: Nreal_1 = %d, Nreal_2 = %d, Nrand = %d" %(jki, nReal1, nReal2, nRand))
 
 
         if cfTypeArg == 'angular':
@@ -49,10 +56,11 @@ def _process_jackknife(args):
 def compute_cf(cfType, realTab1=None, realTab2=None, randTab=None, sepMin=0.1, sepMax=10.0, sepNbins=None, 
                sepBinWidth=None, sep2Min=0.0, sep2Max=40.0, sep2Nbins=None, sep2BinWidth=None, 
                nJacksRa=0, nJacksDec=0, workingDir=os.getcwd(), 
-               realRaCol1='RA',realDecCol1='DEC', realZCol1=None, 
+               realRaCol1='RA',realDecCol1='DEC', realZCol1=None,  
                realRaCol2='RA',realDecCol2='DEC', realZCol2=None,
                randRaCol='RA', randDecCol='Dec', randZCol=None, 
-               doParallel=False, cosmology_H0_Om0=None, doMCF=False, realProperties=None, doRanking=True):
+               doParallel=False, cosmology_H0_Om0=None, doMCF=False, realProperties=None, doRanking=True, weightCol1=None,
+               weightCol2=None, doParallelGundam=False, doBoot=False):
 
     cfAutoCrossLabel = 'cross'
 
@@ -65,7 +73,7 @@ def compute_cf(cfType, realTab1=None, realTab2=None, randTab=None, sepMin=0.1, s
     if cfType not in validCfTypes:
         raise ValueError("Invalid cfType '%s'. Must be one of: %s." %(cfType, ', '.join(validCfTypes)))
 
-    if '3d' in cfType and (realZCol1 is None or randZCol1 is None or realZCol2 is None or randZCol2 is None):
+    if '3d' in cfType and (realZCol1 is None or randZCol is None or realZCol2 is None):
         raise ValueError("Redshift columns should be given for cfType '%s'" %cfType)
 
     if cfType == '3d_projected':
@@ -187,27 +195,51 @@ def compute_cf(cfType, realTab1=None, realTab2=None, randTab=None, sepMin=0.1, s
         }
     )
 
-    jackknifeSamples1 = jackknife_generator.make_JK_samples(realTab1, randTab1, nJacksRa, nJacksDec, realRaCol1, realDecCol1, randRaCol1, randDecCol1, plot=False)
-    jackknifeSamples2 = jackknife_generator.make_JK_samples(realTab2, randTab2, nJacksRa, nJacksDec, realRaCol2, realDecCol2, randRaCol2, randDecCol2, plot=False)
+    jackknifeSamples1 = jackknife_generator.make_JK_samples(realTab1, randTab, nJacksRa, nJacksDec, realRaCol1, realDecCol1, randRaCol, randDecCol, plot=False)
+    if realTab2 is not None:
+        jackknifeSamples2 = jackknife_generator.make_JK_samples(realTab2, randTab, nJacksRa, nJacksDec, realRaCol2, realDecCol2, randRaCol, randDecCol, plot=False)
+    else:
+        jackknifeSamples2 = None
 
     processOutcomes = []
+    tasks = []
+    
+    numProcesses = cpu_count()
+    print(f"Parallelizing with %d processes..." %numProcesses)
+
+    for jki in range(nJacks + 1):
+        argsToPass = (jki, cfType, realTab1, realTab2, randTab, sepMin, sepNbins, sepBinWidth, sep2Nbins, sep2BinWidth, doRanking, 
+                        realRaCol1, realDecCol1, realZCol1, randRaCol, randDecCol, randZCol, realRaCol2, realDecCol2, realZCol2, 
+                        jackknifeSamples1, jackknifeSamples2, workingDir, cosmology_H0_Om0, 
+                        weightCol1, weightCol2, realProperties, 
+                        doParallelGundam, doBoot)
+
+        if doParallel:
+            tasks.append(argsToPass)
+        else:
+            outcome = _process_jackknife(argsToPass)
+            processOutcomes.append(outcome)
 
     if doParallel:
         numProcesses = cpu_count()
-        print(f"Parallelizing with %d processes..." %numProcesses)
-
-        tasks = []
-        for jki in range(nJacks + 1):
-            argsToPass = (jki, cfType, realTab1, realTab2, randTab1, randTab2, sepMin, sepNbins, sepBinWidth, sep2Nbins, sep2BinWidth, doRanking, realRaCol1, realDecCol1, realZCol1, randRaCol1, randDecCol1, randZCol1, realRaCol2, realDecCol2, realZCol2, randRaCol2, randDecCol2, randZCol2, jackknifeSamples1, jackknifeSamples2, workingDir, cosmology_H0_Om0)
-            tasks.append(argsToPass)
+        print("Parallelizing with %d processes..." % numProcesses)
 
         with Pool(processes=numProcesses) as pool:
             processOutcomes = pool.map(_process_jackknife, tasks)
-    else:
-        for jki in range(nJacks+1):
-            argsToPass = (jki, cfType, realTab1, realTab2, randTab1, randTab2, sepMin, sepNbins, sepBinWidth, sep2Nbins, sep2BinWidth, doRanking, realRaCol1, realDecCol1, realZCol1, randRaCol1, randDecCol1, randZCol1, realRaCol2, realDecCol2, realZCol2, randRaCol2, randDecCol2, randZCol2, jackknifeSamples1, jackknifeSamples2, workingDir, cosmology_H0_Om0)
-            outcome = _process_jackknife(argsToPass)
-            processOutcomes.append(outcome)
+    #     for jki in range(nJacks + 1):
+            
+            
+
+    #     with Pool(processes=numProcesses) as pool:
+    #         processOutcomes = pool.map(_process_jackknife, tasks)
+    # else:
+    #     for jki in range(nJacks+1):
+    #         argsToPass = (jki, cfType, realTab1, realTab2, randTab, sepMin, sepNbins, sepBinWidth, sep2Nbins, sep2BinWidth, doRanking, 
+    #                       realRaCol1, realDecCol1, realZCol1, randRaCol, randDecCol, randZCol, realRaCol2, realDecCol2, realZCol2, 
+    #                       jackknifeSamples1, jackknifeSamples2, workingDir, cosmology_H0_Om0,
+    #                       weightCol1Arg, weightCol2Arg, realPropertiesArg, doParallelGundam, doBoot)
+    #         outcome = _process_jackknife(argsToPass)
+    #         processOutcomes.append(outcome)
 
     os.chdir(original_working_dir)
 
@@ -217,3 +249,4 @@ def compute_cf(cfType, realTab1=None, realTab2=None, randTab=None, sepMin=0.1, s
 
     print("All computations completed successfully.")
     return 0
+
