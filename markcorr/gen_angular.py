@@ -15,14 +15,14 @@ def omega_theta(raReal1, decReal1, weightReal1=None, raRand=None, decRand=None,
     if weightReal1 is None:
         gals1['wei'] = 1.
     else:
-        gals1['wei'] = weightReal1 #/np.mean(weightReal1)
+        gals1['wei'] = weightReal1
 
     if crossCF is True:
         gals2 = Table([raReal2, decReal2], names=('ra', 'dec'))
         if weightReal2 is None:
             gals2['wei'] = 1.
         else:
-            gals2['wei'] = weightReal2/np.mean(weightReal2)
+            gals2['wei'] = weightReal2
 
         config = AngularCrossConfig(estimator="LS",
                                         columns_data1=CatalogColumns(ra="ra", dec="dec", weight='wei'), 
@@ -55,15 +55,9 @@ def omega_theta(raReal1, decReal1, weightReal1=None, raRand=None, decRand=None,
         d1r2normalized = d1r2 / d1r2normfactor
         r1d2normalized = r1d2 / r1d2normfactor    
 
-        omega = (d1d2normalized - d1r2normalized - r1d2normalized + r1r2normalized) / r1r2normalized
+        omegaLS = (d1d2normalized - d1r2normalized - r1d2normalized + r1r2normalized)/r1r2normalized
 
-        print("am:", d1d2[0], d1r2[0], r1d2[0], r1r2[0])
-        print("am:", d1d2normfactor, d1r2normfactor, r1d2normfactor, r1r2normfactor)
-        print("am:", d1d2normalized[0], d1r2normalized[0], r1d2normalized[0], r1r2normalized[0], omega[0])
-
-        
-
-        
+        omega = result.wtheta
         omegaErr = result.wtheta_err if doBoot else None
 
     else:
@@ -87,14 +81,16 @@ def omega_theta(raReal1, decReal1, weightReal1=None, raRand=None, decRand=None,
         rr = result.counts.rr
 
         ddnormfactor = sum(gals1['wei']) * (sum(gals1['wei']) - 1) * 0.5
-        rrnormfactor = len(rans1) * (len(rans1) - 1) * 0.5
-        drnormfactor = sum(gals1['wei']) * len(rans1)
+        rrnormfactor = sum(rans1['wei']) * (sum(rans1['wei']) - 1) * 0.5
+        drnormfactor = sum(gals1['wei']) * sum(rans1['wei'])
 
         ddnormalized = dd / ddnormfactor
         rrnormalized = rr / rrnormfactor
         drnormalized = dr / drnormfactor    
 
-        omega = (ddnormalized - 2*drnormalized + rrnormalized) / rrnormalized
+        omegaLS = (ddnormalized - 2*drnormalized + rrnormalized)/rrnormalized
+
+        omega = result.wtheta
         omegaErr = result.wtheta_err if doBoot else None
 
     return th, omega, omegaErr
@@ -118,8 +114,6 @@ def do_compute(realTab1, realTab2=None, randTab=None, thMin=None, thNBins=None, 
         weightReal1 = realTab1[weight_col1]
     else:
         weightReal1 = [1.0] * len(realTab1)  # Default to uniform weights if no weight column is provided
-
-    
 
     if crossCF is True:
         raReal2 = realTab2[realRaCol2]
@@ -152,12 +146,20 @@ def do_compute(realTab1, realTab2=None, randTab=None, thMin=None, thNBins=None, 
 
             if doRanking:
                 propNowRanked = rankdata(propNow)
-                weightRealForMCF = propNowRanked*weightReal1
+                weightRealForMCF1 = propNowRanked*weightReal1
+                if crossCF is True:
+                    weightRealForMCF2 = propNowRanked*weightReal2
+                else:
+                    weightRealForMCF2 = None
             else:
-                weightRealForMCF = propNow*weightReal1
+                weightRealForMCF1 = propNow*weightReal1
+                if crossCF is True:
+                    weightRealForMCF2 = propNow*weightReal2
+                else:
+                    weightRealForMCF2 = None
 
-            th, weightedOmega, _ = omega_theta(raReal1, decReal1, weightReal=weightRealForMCF, raRand=raRand, decRand=decRand,
-                                               raReal2=raReal2, decReal2=decReal2, weightReal2=weightReal2, 
+            th, weightedOmega, _ = omega_theta(raReal1, decReal1, weightReal=weightRealForMCF1, raRand=raRand, decRand=decRand,
+                                               raReal2=raReal2, decReal2=decReal2, weightReal2=weightRealForMCF2, 
                                                 thMin=thMin, thNBins=thNBins, thBinWidth=thBinWidth, 
                                                 doBoot=doBoot, crossCF=crossCF)
 
