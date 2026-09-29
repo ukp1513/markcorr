@@ -3,26 +3,22 @@ from scipy.stats import rankdata
 from astropy.table import Table
 from nugundam import acf, accf, AngularAutoConfig, AngularCrossConfig, CatalogColumns, AngularBinning, AngularGridSpec, WeightSpec
 
-def omega_theta(raReal1, decReal1, weightReal1=None, raRand=None, decRand=None, 
-                raReal2=None, decReal2=None, weightReal2=None, 
+def omega_theta(raReal1, decReal1, weightReal1=None, 
+                raRand1=None, decRand1=None, 
+                raReal2=None, decReal2=None, weightReal2=None,
+                raRand2=None, decRand2=None,  
                 thMin=None, thNBins=None, thBinWidth=None, doBoot=False, crossCF=False):
 
     gals1 = Table([raReal1, decReal1], names=('ra', 'dec'))
-    rans1 = Table([raRand, decRand], names=('ra', 'dec'))
+    rans1 = Table([raRand1, decRand1], names=('ra', 'dec'))
+    gals1['wei'] = weightReal1
     rans1['wei'] = 1.
-    rans2 = rans1.copy()  # For cross-correlation, we need a second random catalog
-
-    if weightReal1 is None:
-        gals1['wei'] = 1.
-    else:
-        gals1['wei'] = weightReal1
 
     if crossCF is True:
         gals2 = Table([raReal2, decReal2], names=('ra', 'dec'))
-        if weightReal2 is None:
-            gals2['wei'] = 1.
-        else:
-            gals2['wei'] = weightReal2
+        rans2 = Table([raRand2, decRand2], names=('ra', 'dec'))
+        rans2['wei'] = 1.
+        gals2['wei'] = weightReal2
 
         config = AngularCrossConfig(estimator="LS",
                                         columns_data1=CatalogColumns(ra="ra", dec="dec", weight='wei'), 
@@ -99,8 +95,10 @@ def mcf_theta(omegaTh, weightedOmegaTh):
     MTheta = (1 + weightedOmegaTh)/(1 + omegaTh)
     return MTheta
 
-def do_compute(realTab1, realTab2=None, randTab=None, thMin=None, thNBins=None, thBinWidth=None, doRanking=True, 
-               realRaCol1='RA',realDecCol1='DEC', realRaCol2='RA',realDecCol2='DEC', randRaCol='RA', randDecCol='Dec', 
+def do_compute(realTab1, realTab2=None, randTab1=None, randTab2=None, 
+               thMin=None, thNBins=None, thBinWidth=None, doRanking=True, 
+               realRaCol1='RA',realDecCol1='DEC', realRaCol2='RA',realDecCol2='DEC', 
+               randRaCol1='RA', randDecCol1='Dec', randRaCol2='RA', randDecCol2='Dec',
                doBoot=False, weight_col1 = None, weight_col2=None, realProperties=None, doParallelGundam=False):
 
     if realTab2 is None:
@@ -127,10 +125,17 @@ def do_compute(realTab1, realTab2=None, randTab=None, thMin=None, thNBins=None, 
         decReal2 = None
         weightReal2 = None
 
-    raRand = randTab[randRaCol]
-    decRand = randTab[randDecCol]
+    raRand1 = randTab1[randRaCol1]
+    decRand1 = randTab1[randDecCol1]
+    if randTab2 is not None:
+        raRand2 = randTab2[randRaCol2]
+        decRand2 = randTab2[randDecCol2]
+    else:
+        raRand2 = None
+        decRand2 = None
 
-    th, omega, _ = omega_theta(raReal1, decReal1, weightReal1, raRand, decRand, raReal2, decReal2, weightReal2, 
+    th, omega, _ = omega_theta(raReal1, decReal1, weightReal1, raRand1, decRand1, 
+                               raReal2, decReal2, weightReal2, raRand2, decRand2,
                                thMin, thNBins, thBinWidth, doBoot=doBoot, crossCF=crossCF)
     
     thOmegaMcfs = np.empty((len(th), 0))
@@ -158,8 +163,10 @@ def do_compute(realTab1, realTab2=None, randTab=None, thMin=None, thNBins=None, 
                 else:
                     weightRealForMCF2 = None
 
-            th, weightedOmega, _ = omega_theta(raReal1, decReal1, weightReal=weightRealForMCF1, raRand=raRand, decRand=decRand,
+            th, weightedOmega, _ = omega_theta(raReal1, decReal1, weightReal=weightRealForMCF1, 
+                                               raRand1=raRand1, decRand=decRand1,
                                                raReal2=raReal2, decReal2=decReal2, weightReal2=weightRealForMCF2, 
+                                               raRand2=raRand2, decRand2=decRand2,
                                                 thMin=thMin, thNBins=thNBins, thBinWidth=thBinWidth, 
                                                 doBoot=doBoot, crossCF=crossCF)
 
