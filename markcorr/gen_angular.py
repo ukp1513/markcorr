@@ -163,7 +163,7 @@ def do_compute(realTab1, realTab2=None, randTab1=None, randTab2=None,
                 else:
                     weightRealForMCF2 = None
 
-            th, weightedOmega, _ = omega_theta(raReal1, decReal1, weightReal=weightRealForMCF1, 
+            th, weightedOmega, _ = omega_theta(raReal1, decReal1, weightReal1=weightRealForMCF1, 
                                                raRand1=raRand1, decRand=decRand1,
                                                raReal2=raReal2, decReal2=decReal2, weightReal2=weightRealForMCF2, 
                                                raRand2=raRand2, decRand2=decRand2,
